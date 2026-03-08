@@ -30,6 +30,7 @@ float prevImu = 0;
 
 void lemlib::setSensors(lemlib::OdomSensors sensors, lemlib::Drivetrain drivetrain) {
     odomSensors = sensors;
+    odomSensors.imu_drift = sensors.imu_drift;
     drive = drivetrain;
 }
 
