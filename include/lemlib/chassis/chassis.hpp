@@ -41,13 +41,13 @@ class OdomSensors {
          * @endcode
          */
         OdomSensors(TrackingWheel* vertical1, TrackingWheel* vertical2, TrackingWheel* horizontal1,
-                    TrackingWheel* horizontal2, pros::Imu* imu, float drift = 1.0f);
+                    TrackingWheel* horizontal2, pros::Imu* imu, float scale = 1.0f);
         TrackingWheel* vertical1;
         TrackingWheel* vertical2;
         TrackingWheel* horizontal1;
         TrackingWheel* horizontal2;
         pros::Imu* imu;
-        float imu_drift;
+        float imu_scale;
 };
 
 /**
@@ -197,6 +197,14 @@ struct TurnToPointParams {
         /** angle between the robot and target point where the movement will exit. Only has an effect if minSpeed is
          * non-zero.*/
         float earlyExitRange = 0;
+        /** angle between the robot and target heading where the earlyLambda will be executed. */
+        float earlyLambdaRange = 0;
+        /**
+         * Function that executes upon earlyLambdaRange is true. Useful for adding custom pre exit behavior.
+         * 
+         * @note earlyLambda will executed asyncronously and only once.
+         */
+        std::function<void()> earlyLambda = nullptr;
 };
 
 /**
@@ -218,6 +226,14 @@ struct TurnToHeadingParams {
         /** angle between the robot and target point where the movement will exit. Only has an effect if minSpeed is
          * non-zero.*/
         float earlyExitRange = 0;
+        /** angle between the robot and target heading where the earlyLambda will be executed. */
+        float earlyLambdaRange = 0;
+        /**
+         * Function that executes upon earlyLambdaRange is true. Useful for adding custom pre exit behavior.
+         * 
+         * @note earlyLambda will executed asyncronously and only once.
+         */
+        std::function<void()> earlyLambda = nullptr;
 };
 
 /**
@@ -254,6 +270,14 @@ struct SwingToPointParams {
         /** angle between the robot and target heading where the movement will exit. Only has an effect if minSpeed is
          * non-zero.*/
         float earlyExitRange = 0;
+        /** angle between the robot and target heading where the earlyLambda will be executed. */
+        float earlyLambdaRange = 0;
+        /**
+         * Function that executes upon earlyLambdaRange is true. Useful for adding custom pre exit behavior.
+         * 
+         * @note earlyLambda will executed asyncronously and only once.
+         */
+        std::function<void()> earlyLambda = nullptr;
 };
 
 /**
@@ -275,6 +299,14 @@ struct SwingToHeadingParams {
         /** angle between the robot and target heading where the movement will exit. Only has an effect if minSpeed is
          * non-zero.*/
         float earlyExitRange = 0;
+        /** angle between the robot and target heading where the earlyLambda will be executed. */
+        float earlyLambdaRange = 0;
+        /**
+         * Function that executes upon earlyLambdaRange is true. Useful for adding custom pre exit behavior.
+         * 
+         * @note earlyLambda will executed asyncronously and only once.
+         */
+        std::function<void()> earlyLambda = nullptr;
 };
 
 /**
@@ -301,6 +333,14 @@ struct MoveToPoseParams {
         /** distance between the robot and target point where the movement will exit. Only has an effect if minSpeed is
          * non-zero.*/
         float earlyExitRange = 0;
+        /** distance between the robot and target point where the earlyLambda will be executed. */
+        float earlyLambdaRange = 0;
+        /**
+         * Function that executes upon earlyLambdaRange is true. Useful for adding custom pre exit behavior.
+         * 
+         * @note earlyLambda will executed asyncronously and only once.
+         */
+        std::function<void()> earlyLambda = nullptr;
 };
 
 /**
@@ -322,6 +362,14 @@ struct MoveToPointParams {
         /** distance between the robot and target point where the movement will exit. Only has an effect if minSpeed is
          * non-zero.*/
         float earlyExitRange = 0;
+        /** distance between the robot and target point where the earlyLambda will be executed. */
+        float earlyLambdaRange = 0;
+        /**
+         * Function that executes upon earlyLambdaRange is true. Useful for adding custom pre exit behavior.
+         * 
+         * @note earlyLambda will executed asyncronously and only once.
+         */
+        std::function<void()> earlyLambda = nullptr;
 };
 
 // default drive curve

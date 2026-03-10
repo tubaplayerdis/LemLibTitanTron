@@ -51,6 +51,14 @@ void lemlib::Chassis::moveToPoint(float x, float y, int timeout, MoveToPointPara
         // calculate distance to the target point
         const float distTarget = pose.distance(target);
 
+        bool ranEarlyLambda = false;
+
+        if (distTarget <= params.earlyLambdaRange && params.earlyLambda != nullptr && !ranEarlyLambda)
+        {
+            new pros::Task(params.earlyLambda);
+            ranEarlyLambda = true;
+        }
+
         // check if the robot is close enough to the target to start settling
         if (distTarget < 7.5 && close == false) {
             close = true;

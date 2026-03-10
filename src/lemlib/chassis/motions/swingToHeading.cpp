@@ -61,6 +61,15 @@ void lemlib::Chassis::swingToHeading(float theta, DriveSide lockedSide, int time
         else deltaTheta = angleError(targetTheta, pose.theta, false, params.direction);
         if (prevDeltaTheta == std::nullopt) prevDeltaTheta = deltaTheta;
 
+        bool ranEarlyLambda = false;
+
+        // early lambda
+        if (deltaTheta <= params.earlyLambdaRange && params.earlyLambda != nullptr && !ranEarlyLambda)
+        {
+            new pros::Task(params.earlyLambda);
+            ranEarlyLambda = true;
+        }
+
         // motion chaining
         if (params.minSpeed != 0 && fabs(deltaTheta) < params.earlyExitRange) break;
         if (params.minSpeed != 0 && sgn(deltaTheta) != sgn(prevDeltaTheta)) break;
