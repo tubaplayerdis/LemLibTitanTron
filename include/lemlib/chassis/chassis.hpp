@@ -372,6 +372,17 @@ struct MoveToPointParams {
         std::function<void()> earlyLambda = nullptr;
 };
 
+struct DriftToPoseParams {
+        /** whether the robot should move forwards or backwards. True by default */
+        bool forwards = true;
+
+        /** Acceleration due to friction */
+        float friction = 0.5;
+
+        /** How far the robot should attempt to move */
+        float driftDistance = 6; 
+};
+
 // default drive curve
 extern ExpoDriveCurve defaultDriveCurve;
 
@@ -729,6 +740,10 @@ class Chassis {
          * @endcode
          */
         void moveToPoint(float x, float y, int timeout, MoveToPointParams params = {}, bool async = true);
+        
+        void driftToPose(float x, float y, float theta, int timeout, DriftToPoseParams params = {}, bool async = true);
+
+
         /**
          * @brief Move the chassis along a path
          *
