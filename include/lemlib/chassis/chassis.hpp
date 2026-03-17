@@ -376,10 +376,10 @@ struct DriftToPoseParams {
         /** whether the robot should move forwards or backwards. True by default */
         bool forwards = true;
 
-        /** Acceleration due to friction */
+        /** Acceleration due to friction in inches/sec */
         float friction = 0.5;
 
-        /** How far the robot should attempt to move */
+        /** How far the robot should attempt to move using its own inertia */
         float driftDistance = 6; 
 };
 
