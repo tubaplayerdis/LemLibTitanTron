@@ -766,7 +766,7 @@ class Chassis {
          */
         void moveToPoint(float x, float y, int timeout, MoveToPointParams params = {}, bool async = true);
         /**
-         * @brief Drive to a point following the most optimal Dubins curve using pure pursuit.
+         * @brief Drive to a point following the most optimal Dubins path using pure pursuit.
          * 
          * @param x x location
          * @param y y location
