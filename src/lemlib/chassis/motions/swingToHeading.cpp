@@ -40,6 +40,8 @@ void lemlib::Chassis::swingToHeading(float theta, DriveSide lockedSide, int time
     if (lockedSide == DriveSide::LEFT) this->drivetrain.leftMotors->set_brake_mode_all(pros::E_MOTOR_BRAKE_HOLD);
     else this->drivetrain.rightMotors->set_brake_mode_all(pros::E_MOTOR_BRAKE_HOLD);
 
+    bool ranEarlyLambda = false;
+
     // main loop
     while (!timer.isDone() && !angularLargeExit.getExit() && !angularSmallExit.getExit() && this->motionRunning) {
         // update variables
@@ -60,8 +62,6 @@ void lemlib::Chassis::swingToHeading(float theta, DriveSide lockedSide, int time
         if (settling) deltaTheta = angleError(targetTheta, pose.theta, false);
         else deltaTheta = angleError(targetTheta, pose.theta, false, params.direction);
         if (prevDeltaTheta == std::nullopt) prevDeltaTheta = deltaTheta;
-
-        bool ranEarlyLambda = false;
 
         // early lambda
         if (deltaTheta <= params.earlyLambdaRange && params.earlyLambda != nullptr && !ranEarlyLambda)

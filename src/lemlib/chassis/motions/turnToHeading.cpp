@@ -32,6 +32,8 @@ void lemlib::Chassis::turnToHeading(float theta, int timeout, TurnToHeadingParam
     angularSmallExit.reset();
     angularPID.reset();
 
+    bool ranEarlyLambda = false;
+
     // main loop
     while (!timer.isDone() && !angularLargeExit.getExit() && !angularSmallExit.getExit() && this->motionRunning) {
         // update variables
@@ -52,8 +54,6 @@ void lemlib::Chassis::turnToHeading(float theta, int timeout, TurnToHeadingParam
         if (settling) deltaTheta = angleError(targetTheta, pose.theta, false);
         else deltaTheta = angleError(targetTheta, pose.theta, false, params.direction);
         if (prevDeltaTheta == std::nullopt) prevDeltaTheta = deltaTheta;
-
-        bool ranEarlyLambda = false;
 
         // early lambda
         if (deltaTheta <= params.earlyLambdaRange && params.earlyLambda != nullptr && !ranEarlyLambda)

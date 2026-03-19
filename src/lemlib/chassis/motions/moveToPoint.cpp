@@ -38,6 +38,8 @@ void lemlib::Chassis::moveToPoint(float x, float y, int timeout, MoveToPointPara
     Pose target(x, y);
     target.theta = lastPose.angle(target);
 
+    bool ranEarlyLambda = false;
+
     // main loop
     while (!timer.isDone() && ((!lateralSmallExit.getExit() && !lateralLargeExit.getExit()) || !close) && this->motionRunning) {
         // update position
@@ -49,8 +51,6 @@ void lemlib::Chassis::moveToPoint(float x, float y, int timeout, MoveToPointPara
 
         // calculate distance to the target point
         const float distTarget = pose.distance(target);
-
-        bool ranEarlyLambda = false;
 
         if (distTarget <= params.earlyLambdaRange && params.earlyLambda != nullptr && !ranEarlyLambda)
         {

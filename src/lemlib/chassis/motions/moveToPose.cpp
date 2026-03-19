@@ -44,6 +44,8 @@ void lemlib::Chassis::moveToPose(float x, float y, float theta, int timeout, Mov
     float prevAngularOut = 0; // previous angular power
     const int compState = pros::competition::get_status();
 
+    bool ranEarlyLambda = false;
+
     // main loop
     while (!timer.isDone() &&
            ((!lateralSettled || (!angularLargeExit.getExit() && !angularSmallExit.getExit())) || !close) &&
@@ -57,8 +59,6 @@ void lemlib::Chassis::moveToPose(float x, float y, float theta, int timeout, Mov
 
         // calculate distance to the target point
         const float distTarget = pose.distance(target);
-
-        bool ranEarlyLambda = false;
 
         // check whether the robot is close enough to execute the early lambda
         if (distTarget <= params.earlyLambdaRange && params.earlyLambda != nullptr && !ranEarlyLambda)

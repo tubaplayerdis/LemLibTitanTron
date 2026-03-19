@@ -375,11 +375,16 @@ struct MoveToPointParams {
 struct PursuitToPoseParams {
         /** whether the robot should move forwards or backwards. True by default */
         bool forwards = true;
-        /** the maximum speed the robot can travel at. Value between 0-127. 127 by default */
+        /** how fast the robot will move around corners. Recommended value 2-15. 0 means use horizontalDrift set in
+         * chassis class. 0 by default. */
+        float horizontalDrift = 0;
+         /** the maximum speed the robot can travel at. Value between 0-127. 127 by default */
         float maxSpeed = 127;
-        /** the minimum speed the robot can travel at. If set to a non-zero value, the exit conditions will switch to
-         * less accurate but smoother ones. Value between 0-127. 0 by default */
-        float minSpeed = 0;
+        /** resolution of the points generated. comparable to path.jerry.io's point density. */
+        float resolution = 2;
+        /** the lookahead distance. Units in inches. Larger values will make the robot move
+         * faster but will follow the path less accurately */
+        float lookahead = 9;
         /** distance between the robot and target point where the movement will exit. Only has an effect if minSpeed is
          * non-zero.*/
         float earlyExitRange = 0;
@@ -760,10 +765,17 @@ class Chassis {
          * @endcode
          */
         void moveToPoint(float x, float y, int timeout, MoveToPointParams params = {}, bool async = true);
-        
+        /**
+         * @brief Drive to a point following the most optimal Dubins curve using pure pursuit.
+         * 
+         * @param x x location
+         * @param y y location
+         * @param theta target heading in degrees
+         * @param timeout longest time the robot can spend moving
+         * @param params struct to simulate named parameters
+         * @param async whether the function should be run asynchronously. true by default
+         */
         void pursuitToPose(float x, float y, float theta, int timeout, PursuitToPoseParams params = {}, bool async = true);
-
-
         /**
          * @brief Move the chassis along a path
          *
@@ -792,6 +804,18 @@ class Chassis {
          * @endcode
          */
         void follow(const asset& path, float lookahead, int timeout, bool forwards = true, bool async = true);
+        /**
+         * @brief Move the chassis along a path. Overload that uses a vector of poses
+         *
+         * @param path the path asset to follow
+         * @param lookahead the lookahead distance. Units in inches. Larger values will make the robot move
+         * faster but will follow the path less accurately
+         * @param timeout the maximum time the robot can spend moving
+         * @param forwards whether the robot should follow the path going forwards. true by default
+         * @param async whether the function should be run asynchronously. true by default
+         *
+         */
+        void follow(std::vector<lemlib::Pose> path, float lookahead, int timeout, bool forwards = true, bool async = true);
         /**
          * @brief Control the robot during the driver using the tank drive control scheme. In this control scheme one
          * joystick axis controls the left motors' forward and backwards movement of the robot, while the other joystick
