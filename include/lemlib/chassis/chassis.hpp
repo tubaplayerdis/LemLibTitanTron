@@ -176,6 +176,13 @@ enum class AngularDirection {
     AUTO /** turn in the direction with the shortest distance to target */
 };
 
+enum class PathType {
+    RSR,
+    RSL,
+    LSR,
+    LSL
+};
+
 /**
  * @brief Parameters for Chassis::turnToPoint
  *
@@ -775,7 +782,7 @@ class Chassis {
          * @param params struct to simulate named parameters
          * @param async whether the function should be run asynchronously. true by default
          */
-        void pursuitToPose(float x, float y, float theta, int timeout, PursuitToPoseParams params = {}, bool async = true);
+        void pursuitToPose(float x, float y, float theta, PathType pathType, int timeout, PursuitToPoseParams params = {}, bool async = true);
         /**
          * @brief Move the chassis along a path
          *
