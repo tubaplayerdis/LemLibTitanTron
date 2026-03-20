@@ -34,45 +34,67 @@ float dist(float x1, float y1, float x2, float y2) {
     return sqrt(pow(x2 - x1, 2) + pow(y2 - y1, 2));
 }
 
-std::vector<DubinsPath> generateCanidates(float SLx, float SLy, float SRx, float SRy, float GLx, float GLy, float GRx, float GRy, float rho, float startAng, float endAng)
+DubinsPath generatePathOfType(lemlib::PathType type, float SLx, float SLy, float SRx, float SRy, float GLx, float GLy, float GRx, float GRy, float rho, float startAng, float endAng)
 {
-    std::vector<DubinsPath> candidates;
+    DubinsPath ret;
 
-    // --- LSL Calculation ---
-    float dLSL = dist(SLx, SLy, GLx, GLy);
-    float thLSL = atan2(GLy - SLy, GLx - SLx);
-    float l1_lsl = rho * norm(thLSL - M_PI/2 - startAng);
-    float l3_lsl = rho * norm(endAng - (thLSL - M_PI/2));
-    candidates.push_back({l1_lsl, dLSL, l3_lsl, SLx, SLy, GLx, GLy, 0, l1_lsl + dLSL + l3_lsl});
+    switch (type)
+    {
+        case lemlib::PathType::LSL:
+        {
+            // --- LSL Calculation ---
+            float dLSL = dist(SLx, SLy, GLx, GLy);
+            float thLSL = atan2(GLy - SLy, GLx - SLx);
+            float l1_lsl = rho * norm(thLSL - M_PI/2 - startAng);
+            float l3_lsl = rho * norm(endAng - (thLSL - M_PI/2));
+            ret = {l1_lsl, dLSL, l3_lsl, SLx, SLy, GLx, GLy, 0, l1_lsl + dLSL + l3_lsl};
+            break;
+        }
 
-    // --- RSR Calculation ---
-    float dRSR = dist(SRx, SRy, GRx, GRy);
-    float thRSR = atan2(GRy - SRy, GRx - SRx);
-    float l1_rsr = rho * norm(startAng - (thRSR + M_PI/2));
-    float l3_rsr = rho * norm((thRSR + M_PI/2) - endAng);
-    candidates.push_back({l1_rsr, dRSR, l3_rsr, SRx, SRy, GRx, GRy, 1, l1_rsr + dRSR + l3_rsr});
+        case lemlib::PathType::RSR:
+        {
+            float dRSR = dist(SRx, SRy, GRx, GRy);
+            float thRSR = atan2(GRy - SRy, GRx - SRx);
+            float l1_rsr = rho * norm(startAng - (thRSR + M_PI/2));
+            float l3_rsr = rho * norm((thRSR + M_PI/2) - endAng);
+            ret = {l1_rsr, dRSR, l3_rsr, SRx, SRy, GRx, GRy, 1, l1_rsr + dRSR + l3_rsr};
+            break;
+        }
 
-    // --- LSR Calculation (Check if d > 2*rho) ---
-    float dLSR = dist(SLx, SLy, GRx, GRy);
-    if (dLSR > 2 * rho) {
-        float thLSR = atan2(GRy - SLy, GRx - SLx) + acos(2 * rho / dLSR);
-        float l1_lsr = rho * norm(thLSR - startAng);
-        float l3_lsr = rho * norm(thLSR - M_PI - endAng);
-        float mid_lsr = sqrt(dLSR * dLSR - 4 * rho * rho);
-        candidates.push_back({l1_lsr, mid_lsr, l3_lsr, SLx, SLy, GRx, GRy, 2, l1_lsr + mid_lsr + l3_lsr});
+        case lemlib::PathType::LSR:
+        {
+            float dLSR = dist(SLx, SLy, GRx, GRy);
+            float thLSR = atan2(GRy - SLy, GRx - SLx) + acos(2 * rho / dLSR);
+            float l1_lsr = rho * norm(thLSR - startAng);
+            float l3_lsr = rho * norm(thLSR - M_PI - endAng);
+            float mid_lsr = sqrt(dLSR * dLSR - 4 * rho * rho);
+            ret = {l1_lsr, mid_lsr, l3_lsr, SLx, SLy, GRx, GRy, 2, l1_lsr + mid_lsr + l3_lsr};
+            break;
+        }
+
+        case lemlib::PathType::RSL:
+        {
+            float dRSL = dist(SRx, SRy, GLx, GLy);
+            float thRSL = atan2(GLy - SRy, GLx - SRx) - acos(2 * rho / dRSL);
+            float l1_rsl = rho * norm(startAng - thRSL);
+            float l3_rsl = rho * norm(endAng - (thRSL + M_PI));
+            float mid_rsl = sqrt(dRSL * dRSL - 4 * rho * rho);
+            ret = {l1_rsl, mid_rsl, l3_rsl, SRx, SRy, GLx, GLy, 3, l1_rsl + mid_rsl + l3_rsl};
+            break;
+        }
+
+        default: //LSL
+        {
+            float dLSL = dist(SLx, SLy, GLx, GLy);
+            float thLSL = atan2(GLy - SLy, GLx - SLx);
+            float l1_lsl = rho * norm(thLSL - M_PI/2 - startAng);
+            float l3_lsl = rho * norm(endAng - (thLSL - M_PI/2));
+            ret = {l1_lsl, dLSL, l3_lsl, SLx, SLy, GLx, GLy, 0, l1_lsl + dLSL + l3_lsl};
+            break;
+        }
     }
 
-    // --- RSL Calculation (Check if d > 2*rho) ---
-    float dRSL = dist(SRx, SRy, GLx, GLy);
-    if (dRSL > 2 * rho) {
-        float thRSL = atan2(GLy - SRy, GLx - SRx) - acos(2 * rho / dRSL);
-        float l1_rsl = rho * norm(startAng - thRSL);
-        float l3_rsl = rho * norm(endAng - (thRSL + M_PI));
-        float mid_rsl = sqrt(dRSL * dRSL - 4 * rho * rho);
-        candidates.push_back({l1_rsl, mid_rsl, l3_rsl, SRx, SRy, GLx, GLy, 3, l1_rsl + mid_rsl + l3_rsl});
-    }
-
-    return candidates;
+    return ret;
 }
 
 std::vector<lemlib::Pose> generatePath(float resolution, float rho, float startAng, float endAng, DubinsPath best, lemlib::Pose start, lemlib::Pose end)
@@ -124,7 +146,7 @@ std::vector<lemlib::Pose> generatePath(float resolution, float rho, float startA
     return path;
 }
 
-std::vector<lemlib::Pose> generateDubinsPath(lemlib::Pose start, lemlib::Pose end, float resolution,  float rho)
+std::vector<lemlib::Pose> generateDubinsPath(lemlib::Pose start, lemlib::Pose end, float resolution, lemlib::PathType pt, float rho)
 {
     float st = coterm(lemlib::degToRad(start.theta));
     float et = coterm(lemlib::degToRad(end.theta));
@@ -135,12 +157,7 @@ std::vector<lemlib::Pose> generateDubinsPath(lemlib::Pose start, lemlib::Pose en
     float GLx = end.x + rho * cos(et + M_PI/2), GLy = end.y + rho * sin(et + M_PI/2);
     float GRx = end.x + rho * cos(et - M_PI/2), GRy = end.y + rho * sin(et - M_PI/2);
 
-    std::vector<DubinsPath> candidates = generateCanidates(SLx, SLy, SRx, SRy, GLx, GLy, GRx, GRy, rho, st, et);
-
-    // 3. Find the Best Path
-    DubinsPath best = *std::min_element(candidates.begin(), candidates.end(), [](const DubinsPath& a, const DubinsPath& b) {
-        return a.totalDist < b.totalDist;
-    });
+    DubinsPath best = generatePathOfType(pt, SLx, SLy, SRx, SRy, GLx, GLy, GRx, GRy, rho, st, et);
 
     std::vector<lemlib::Pose> path = generatePath(resolution, rho, st, et, best, start, end);
     
@@ -442,14 +459,14 @@ void lemlib::Chassis::follow(const asset& path, float lookahead, int timeout, bo
     follow(getData(path), lookahead, timeout, forwards, async);
 }
 
-void lemlib::Chassis::pursuitToPose(float x, float y, float theta, int timeout, PursuitToPoseParams params, bool async)
+void lemlib::Chassis::pursuitToPose(float x, float y, float theta, PathType pathType, int timeout, PursuitToPoseParams params, bool async)
 {
     this->requestMotionStart();
     // were all motions cancelled?
     if (!this->motionRunning) return;
     // if the function is async, run it in a new task
     if (async) {
-        pros::Task task([&]() { pursuitToPose(x, y, theta, timeout, params, false); });
+        pros::Task task([&]() { pursuitToPose(x, y, theta, pathType, timeout, params, false); });
         this->endMotion();
         pros::delay(10); // delay to give the task time to start
         return;
@@ -462,7 +479,7 @@ void lemlib::Chassis::pursuitToPose(float x, float y, float theta, int timeout, 
     // Use default horizontial drift from the drivetrain class
     if(params.horizontalDrift = 0) params.horizontalDrift = drivetrain.horizontalDrift;
 
-    std::vector<lemlib::Pose> pathPoints = generateDubinsPath(getPose(), target, params.resolution, turningRadius); // get list of path points
+    std::vector<lemlib::Pose> pathPoints = generateDubinsPath(getPose(), target, params.resolution, pathType, turningRadius); // get list of path points
     if (pathPoints.size() == 0) {
         infoSink()->error("No points in path! Do you have the right format? Skipping motion");
         // set distTraveled to -1 to indicate that the function has finished
