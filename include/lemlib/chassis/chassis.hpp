@@ -388,7 +388,9 @@ struct PursuitToPoseParams {
          /** the maximum speed the robot can travel at. Value between 0-127. 127 by default */
         float maxSpeed = 127;
         /** resolution of the points generated. comparable to path.jerry.io's point density. */
-        float resolution = 2;
+        float resolution = 1;
+        /** The turning radius used to generate curves. Defaults to half the wheel base width */
+        float turningRadius = 0;
         /** the lookahead distance. Units in inches. Larger values will make the robot move
          * faster but will follow the path less accurately */
         float lookahead = 9;
@@ -782,7 +784,7 @@ class Chassis {
          * @param params struct to simulate named parameters
          * @param async whether the function should be run asynchronously. true by default
          */
-        void pursuitToPose(float x, float y, float theta, PathType pathType, int timeout, PursuitToPoseParams params = {}, bool async = true);
+        void pursuitToPose(float x, float y, float theta, int timeout, PursuitToPoseParams params = {}, bool async = true);
         /**
          * @brief Move the chassis along a path
          *
@@ -1054,3 +1056,9 @@ class Chassis {
         pros::Mutex mutex;
 };
 } // namespace lemlib
+
+float findLookaheadCurvature(lemlib::Pose pose, float heading, lemlib::Pose lookahead);
+lemlib::Pose lookaheadPoint(lemlib::Pose lastLookahead, lemlib::Pose pose, std::vector<lemlib::Pose> path, int closest,
+                            float lookaheadDist);
+float circleIntersect(lemlib::Pose p1, lemlib::Pose p2, lemlib::Pose pose, float lookaheadDist);
+int findClosest(lemlib::Pose pose, std::vector<lemlib::Pose> path);
