@@ -231,14 +231,14 @@ void lemlib::Chassis::pursuitToPose(float x, float y, float theta, int timeout, 
 
     if(params.turningRadius == 0) params.turningRadius = (drivetrain.trackWidth / 2);
 
-    float curvature =  1.00f / params.turningRadius;
+    float pathCurvature =  1.00f / params.turningRadius;
 
     // Use default horizontial drift from the drivetrain class
     if(params.horizontalDrift == 0) params.horizontalDrift = drivetrain.horizontalDrift;
 
     lemlib::Pose startPos = getPose();
 
-    std::vector<lemlib::Pose> pathPoints = planDubins(startPos.x, startPos.y, ((90.0 - startPos.theta) * PI / 180.0), x, y, ((90.0 - theta) * PI / 180.0), curvature, params.resolution); // get list of path points
+    std::vector<lemlib::Pose> pathPoints = planDubins(startPos.x, startPos.y, ((90.0 - startPos.theta) * PI / 180.0), x, y, ((90.0 - theta) * PI / 180.0), pathCurvature, params.resolution); // get list of path points
     if (pathPoints.size() == 0) {
         // set distTraveled to -1 to indicate that the function has finished
         distTraveled = -1;
