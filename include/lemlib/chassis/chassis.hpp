@@ -387,6 +387,10 @@ struct PursuitToPoseParams {
         float horizontalDrift = 0;
          /** the maximum speed the robot can travel at. Value between 0-127. 127 by default */
         float maxSpeed = 127;
+        /** the minimum speed the robot can travel at. Value between 0-127. 0 by default */
+        float minSpeed = 0;
+        /** Whether minSpeed will override the generated cornering speed calculated via horizontalDrift. False by default */
+        bool minSpeedOverride = false;
         /** resolution of the points generated. comparable to path.jerry.io's point density. */
         float resolution = 1;
         /** The turning radius used to generate curves. Defaults to half the wheel base width */

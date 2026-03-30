@@ -141,10 +141,7 @@ void generateCourse(const std::vector<double>& lengths,
 
 // ------------------- Main Planner -------------------
 
-std::vector<lemlib::Pose> planDubins(double sx, double sy, double syaw,
-                                     double gx, double gy, double gyaw,
-                                     double curvature,
-                                     double step = 0.2) {
+std::vector<lemlib::Pose> planDubins(double sx, double sy, double syaw, double gx, double gy, double gyaw, double curvature, double step) {
 
     // Transform to local frame
     double dx = gx - sx;
@@ -273,8 +270,11 @@ void lemlib::Chassis::pursuitToPose(float x, float y, float theta, int timeout, 
         float brakeDistance = 12.0; 
         if (distToEnd < brakeDistance) {
             target = std::min(target, (distToEnd / brakeDistance) * params.maxSpeed + 15);
+
+            if(target < params.minSpeed) target = params.minSpeed;
         }
 
+        if(params.minSpeedOverride && target < params.minSpeed) target = params.minSpeed;
         // Save calculated velocity into theta
         pathPoints.at(i).theta = target;
     }
