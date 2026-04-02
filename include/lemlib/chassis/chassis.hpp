@@ -11,6 +11,23 @@
 
 namespace lemlib {
 
+class ScalingIMU : pros::Imu
+{
+        const double scale;
+    public:
+        ScalingIMU(const std::uint8_t port, const double scale) : pros::Imu(port), scale(scale) {}
+
+        double get_rotation() const override 
+        {
+             return Imu::get_rotation() * scale;
+        }
+
+        double get_heading() const override 
+        {
+             return Imu::get_heading() * scale;
+        }
+};
+
 /**
  * @brief class containing the sensors used for odometry
  */
@@ -47,7 +64,6 @@ class OdomSensors {
         TrackingWheel* horizontal1;
         TrackingWheel* horizontal2;
         pros::Imu* imu;
-        float imu_scale;
 };
 
 /**
