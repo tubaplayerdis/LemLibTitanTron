@@ -1,6 +1,7 @@
 #include <vector>
 #include <cmath>
 #include <limits>
+#include <fstream>
 #include "lemlib/chassis/chassis.hpp"
 #include "lemlib/util.hpp"
 
@@ -281,6 +282,16 @@ void lemlib::Chassis::pursuitToPose(float x, float y, float theta, int timeout, 
 
     // 2. Ensure the very last point is exactly 0 to trigger the loop break
     pathPoints.back().theta = 0;
+
+    if(params.outputDebug)
+    {
+        std::ofstream pathDebugOutput("PathingDebug.txt", std::ios::app);
+        for (int i = 0; i < pathPoints.size(); i++)
+        {
+            pathDebugOutput << pathPoints[i].x << ", " << pathPoints[i].y << ", " << pathPoints[i].theta << std::endl;
+        }
+        pathDebugOutput << "\n\n\n";
+    }
 
 
     Pose pose = this->getPose(true);

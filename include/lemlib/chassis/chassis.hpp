@@ -11,7 +11,7 @@
 
 namespace lemlib {
 
-class ScalingIMU : pros::Imu
+class ScalingIMU : public pros::Imu
 {
         const double scale;
     public:
@@ -58,7 +58,7 @@ class OdomSensors {
          * @endcode
          */
         OdomSensors(TrackingWheel* vertical1, TrackingWheel* vertical2, TrackingWheel* horizontal1,
-                    TrackingWheel* horizontal2, pros::Imu* imu, float scale = 1.0f);
+                    TrackingWheel* horizontal2, pros::Imu* imu);
         TrackingWheel* vertical1;
         TrackingWheel* vertical2;
         TrackingWheel* horizontal1;
@@ -425,6 +425,9 @@ struct PursuitToPoseParams {
          * @note earlyLambda will execute asynchronously and only once.
          */
         std::function<void()> earlyLambda = nullptr;
+
+        /*Print the generated path to the micro sd card*/
+        bool outputDebug = false;
 };
 
 // default drive curve
