@@ -457,7 +457,7 @@ def main():
     sl_ex   = Slider(make_slider_ax(3), 'End X', -72.0, 72.0, valinit=e_x)
     sl_ey   = Slider(make_slider_ax(4), 'End Y', -72.0, 72.0, valinit=e_y)
     sl_eyaw = Slider(make_slider_ax(5), 'End Yaw', 0.0, 360.0, valinit=e_yaw_deg)
-    sl_rad  = Slider(make_slider_ax(6), 'Radius', 1.0, 30.0, valinit=radius)
+    sl_rad  = Slider(make_slider_ax(6), 'Radius', 1.0, 60.0, valinit=radius)
 
     def update(val):
         nonlocal start_arrow, end_arrow

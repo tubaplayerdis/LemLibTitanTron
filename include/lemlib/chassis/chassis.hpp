@@ -408,8 +408,8 @@ struct PursuitToPoseParams {
         /** Whether minSpeed will override the generated cornering speed calculated via horizontalDrift. False by default */
         bool minSpeedOverride = false;
         /** resolution of the points generated. comparable to path.jerry.io's point density. */
-        float resolution = 0.5;
-        /** The turning radius used to generate curves. Defaults to half the wheel base width */
+        float resolution = 0.1;
+        /** The turning radius used to generate curves. Defaults to 1.5 times the wheel base width */
         float turningRadius = 0;
         /** the lookahead distance. Units in inches. Larger values will make the robot move
          * faster but will follow the path less accurately */
