@@ -432,7 +432,7 @@ def main():
     fig, ax = plt.subplots(figsize=(10, 8))
     plt.subplots_adjust(bottom=0.35) # Leave a large gap at the bottom
 
-    fig.canvas.manager.set_window_title('Titantron DPS Planner')
+    fig.canvas.manager.set_window_title('Titantron DPP Planner')
 
     # Load and display field image
     try:
