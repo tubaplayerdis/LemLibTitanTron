@@ -1,6 +1,7 @@
 #include <vector>
 #include <cmath>
 #include <limits>
+#include <fstream>
 #include "lemlib/chassis/chassis.hpp"
 #include "lemlib/util.hpp"
 
@@ -141,10 +142,7 @@ void generateCourse(const std::vector<double>& lengths,
 
 // ------------------- Main Planner -------------------
 
-std::vector<lemlib::Pose> planDubins(double sx, double sy, double syaw,
-                                     double gx, double gy, double gyaw,
-                                     double curvature,
-                                     double step = 0.2) {
+std::vector<lemlib::Pose> planDubins(double sx, double sy, double syaw, double gx, double gy, double gyaw, double curvature, double step) {
 
     // Transform to local frame
     double dx = gx - sx;
@@ -227,7 +225,9 @@ void lemlib::Chassis::pursuitToPose(float x, float y, float theta, int timeout, 
         return;
     }
 
+    theta += 180.0f;
     lemlib::Pose target(x, y, theta);
+
 
     if(params.turningRadius == 0) params.turningRadius = (drivetrain.trackWidth / 2);
 
@@ -238,7 +238,12 @@ void lemlib::Chassis::pursuitToPose(float x, float y, float theta, int timeout, 
 
     lemlib::Pose startPos = getPose();
 
-    std::vector<lemlib::Pose> pathPoints = planDubins(startPos.x, startPos.y, ((90.0 - startPos.theta) * PI / 180.0), x, y, ((90.0 - theta) * PI / 180.0), pathCurvature, params.resolution); // get list of path points
+    if(params.forwards == false)
+    {
+        startPos.theta += 180.0f;
+    }
+
+    std::vector<lemlib::Pose> pathPoints = planDubins(startPos.x, startPos.y, ((90.0 - startPos.theta) * PI / 180.0), target.x, target.y, ((90.0 - target.theta) * PI / 180.0), pathCurvature, params.resolution); // get list of path points
     if (pathPoints.size() == 0) {
         // set distTraveled to -1 to indicate that the function has finished
         distTraveled = -1;
@@ -273,14 +278,27 @@ void lemlib::Chassis::pursuitToPose(float x, float y, float theta, int timeout, 
         float brakeDistance = 12.0; 
         if (distToEnd < brakeDistance) {
             target = std::min(target, (distToEnd / brakeDistance) * params.maxSpeed + 15);
+
+            if(target < params.minSpeed) target = params.minSpeed;
         }
 
+        if(params.minSpeedOverride && target < params.minSpeed) target = params.minSpeed;
         // Save calculated velocity into theta
         pathPoints.at(i).theta = target;
     }
 
     // 2. Ensure the very last point is exactly 0 to trigger the loop break
     pathPoints.back().theta = 0;
+
+    if(params.outputDebug)
+    {
+        std::ofstream pathDebugOutput("PathingDebug.txt", std::ios::app);
+        for (int i = 0; i < pathPoints.size(); i++)
+        {
+            pathDebugOutput << pathPoints[i].x << ", " << pathPoints[i].y << ", " << pathPoints[i].theta << std::endl;
+        }
+        pathDebugOutput << "\n\n\n";
+    }
 
 
     Pose pose = this->getPose(true);
