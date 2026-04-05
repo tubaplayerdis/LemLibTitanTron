@@ -412,40 +412,101 @@ def _generate_local_course(lengths, modes, max_curvature, step_size):
     return p_x, p_y, p_yaw
 
 
+from matplotlib.widgets import *
+
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.widgets import Slider
+from PIL import Image
+
 def main():
-    print("Dubins path planner sample start!!")
-    import matplotlib.pyplot as plt
+    print("Dubins path planner: Interactive Mode")
 
-    start_x = -13.0  # [m]
-    start_y = 13.0  # [m]
-    start_yaw = np.deg2rad(125)  # [rad]
+    # Initial Parameters
+    s_x, s_y, s_yaw_deg = -13.0, 13.0, 125.0
+    e_x, e_y, e_yaw_deg = -53.0, 47.0, 270.0
+    radius = 12.0
+    FIELD_IN = 144
 
-    end_x = -53.0  # [m]
-    end_y = 47.0  # [m]
-    end_yaw = np.deg2rad(180)  # [rad]
+    # Create figure and adjust layout to make room for 7 sliders
+    fig, ax = plt.subplots(figsize=(10, 8))
+    plt.subplots_adjust(bottom=0.35) # Leave a large gap at the bottom
 
-    curvature = 0.1
+    fig.canvas.manager.set_window_title('Titantron DPS Planner')
 
-    path_x, path_y, path_yaw, mode, lengths = plan_dubins_path(start_x,
-                                                               start_y,
-                                                               start_yaw,
-                                                               end_x,
-                                                               end_y,
-                                                               end_yaw,
-                                                               curvature)
-
-    if show_animation:
-        FIELD_IN = 144
+    # Load and display field image
+    try:
         field_img = Image.open("MatchField.png")
-        plt.imshow(field_img, extent=[-FIELD_IN/2, FIELD_IN/2, -FIELD_IN/2, FIELD_IN/2])
-        plt.plot(path_x, path_y, label="".join(mode))
-        plot_arrow(start_x, start_y, start_yaw)
-        plot_arrow(end_x, end_y, end_yaw)
-        plt.legend()
-        plt.grid(True)
-        plt.axis("equal")
-        plt.show()
+        ax.imshow(field_img, extent=[-FIELD_IN/2, FIELD_IN/2, -FIELD_IN/2, FIELD_IN/2])
+    except FileNotFoundError:
+        print("MatchField.png not found, plotting on empty grid.")
 
+    # Initialize plot elements (empty at first)
+    path_line, = ax.plot([], [], label="Dubins Path", color='blue', lw=2)
+    start_arrow = None
+    end_arrow = None
+
+    # --- Slider Setup ---
+    # Helper to create slider axes easily
+    def make_slider_ax(index):
+        return fig.add_axes([0.15, 0.25 - (index * 0.035), 0.7, 0.02])
+
+    sl_sx   = Slider(make_slider_ax(0), 'Start X', -72.0, 72.0, valinit=s_x)
+    sl_sy   = Slider(make_slider_ax(1), 'Start Y', -72.0, 72.0, valinit=s_y)
+    #sl_syaw = Slider(make_slider_ax(2), 'Start Yaw', 0.0, 360.0, valinit=s_yaw_deg)
+    sl_ex   = Slider(make_slider_ax(3), 'End X', -72.0, 72.0, valinit=e_x)
+    sl_ey   = Slider(make_slider_ax(4), 'End Y', -72.0, 72.0, valinit=e_y)
+    sl_eyaw = Slider(make_slider_ax(5), 'End Yaw', 0.0, 360.0, valinit=e_yaw_deg)
+    sl_rad  = Slider(make_slider_ax(6), 'Radius', 1.0, 30.0, valinit=radius)
+
+    def update(val):
+        nonlocal start_arrow, end_arrow
+        
+        # Get values from sliders
+        cur_sx = sl_sx.val
+        cur_sy = sl_sy.val
+        #cur_syaw = np.deg2rad(atan2())
+        cur_ex = sl_ex.val
+        cur_ey = sl_ey.val
+        cur_eyaw = np.deg2rad(sl_eyaw.val - 90)
+        cur_rad = sl_rad.val
+
+        cur_syaw = atan2(cur_ey - cur_sy, cur_ex - cur_sx);
+        
+        # Calculate Path
+        px, py, pyaw, mode, lengths = plan_dubins_path(
+            cur_sx, cur_sy, cur_syaw, 
+            cur_ex, cur_ey, cur_eyaw, 1/cur_rad
+        )
+
+        # Update Path Plot
+        path_line.set_data(px, py)
+        path_line.set_label("".join(mode))
+        
+        # Update Arrows (Clear old ones and redraw)
+        if start_arrow: start_arrow.remove()
+        if end_arrow: end_arrow.remove()
+        
+        # Assuming plot_arrow returns the artist object
+        start_arrow = plot_arrow(cur_sx, cur_sy, cur_syaw)
+        end_arrow = plot_arrow(cur_ex, cur_ey, cur_eyaw)
+        
+        ax.legend(loc='upper right')
+        fig.canvas.draw_idle()
+
+    # Register the update function with every slider
+    sliders = [sl_sx, sl_sy, sl_ex, sl_ey, sl_eyaw, sl_rad] #end yaw slider is currenty excluded
+    for s in sliders:
+        s.on_changed(update)
+
+    # Initial call to populate the graph
+    update(None)
+
+    ax.set_xlim([-72, 72])
+    ax.set_ylim([-72, 72])
+    ax.grid(True)
+    ax.set_aspect('equal')
+    plt.show()
 
 if __name__ == '__main__':
     main()
