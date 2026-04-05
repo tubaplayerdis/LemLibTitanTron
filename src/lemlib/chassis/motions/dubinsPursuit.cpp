@@ -225,7 +225,9 @@ void lemlib::Chassis::pursuitToPose(float x, float y, float theta, int timeout, 
         return;
     }
 
+    theta += 180.0f;
     lemlib::Pose target(x, y, theta);
+
 
     if(params.turningRadius == 0) params.turningRadius = (drivetrain.trackWidth / 2);
 
@@ -236,7 +238,12 @@ void lemlib::Chassis::pursuitToPose(float x, float y, float theta, int timeout, 
 
     lemlib::Pose startPos = getPose();
 
-    std::vector<lemlib::Pose> pathPoints = planDubins(startPos.x, startPos.y, ((90.0 - startPos.theta) * PI / 180.0), x, y, ((90.0 - theta) * PI / 180.0), pathCurvature, params.resolution); // get list of path points
+    if(params.forwards == false)
+    {
+        startPos.theta += 180.0f;
+    }
+
+    std::vector<lemlib::Pose> pathPoints = planDubins(startPos.x, startPos.y, ((90.0 - startPos.theta) * PI / 180.0), target.x, target.y, ((90.0 - target.theta) * PI / 180.0), pathCurvature, params.resolution); // get list of path points
     if (pathPoints.size() == 0) {
         // set distTraveled to -1 to indicate that the function has finished
         distTraveled = -1;
