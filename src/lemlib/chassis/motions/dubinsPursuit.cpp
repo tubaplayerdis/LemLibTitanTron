@@ -207,7 +207,7 @@ std::vector<lemlib::Pose> planDubins(double sx, double sy, double syaw, double g
         result.emplace_back(
             gx2,
             gy2,
-            gyaw2 * 180.0 / PI
+            gyaw2// * 180.0 / PI keep in radians
         );
     }
 
@@ -293,9 +293,9 @@ void lemlib::Chassis::pursuitToPose(float x, float y, float theta, int timeout, 
     if(params.outputDebug)
     {
         std::ofstream pathDebugOutput("PathingDebug.txt", std::ios::app);
-        for (int i = 0; i < pathPoints.size(); i++)
+        for (int i = 0; i < path_points_r.size(); i++)
         {
-            pathDebugOutput << pathPoints[i].x << ", " << pathPoints[i].y << ", " << pathPoints[i].theta << std::endl;
+            pathDebugOutput << path_points_r[i].first.x << ", " << path_points_r[i].first.y << ", " << path_points_r[i].first.theta << std::endl;
         }
         pathDebugOutput << "\n\n\n";
     }
@@ -354,8 +354,8 @@ void lemlib::Chassis::pursuitToPose(float x, float y, float theta, int timeout, 
 
         // 6. Ramsete Gain Calculation
         // Standard gains: b = 2.0, zeta = 0.7
-        float b = 2.0; 
-        float zeta = 0.7;
+        float b = params.b; 
+        float zeta = params.zeta;
         float k = 2 * zeta * sqrt(pow(w_d, 2) + b * pow(v_d, 2));
 
         // 7. Compute Adjusted Velocities
