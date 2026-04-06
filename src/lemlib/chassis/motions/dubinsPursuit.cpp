@@ -329,22 +329,8 @@ void lemlib::Chassis::pursuitToPose(float x, float y, float theta, int timeout, 
         // if the robot is at the end of the path, then stop
         if (pathPoints.at(closestPoint).theta == 0) break;
 
-        // Using targetVel is smoother; using actual velocity is more reactive but can be noisy.
-        float currentVel = std::abs(targetVel); 
-
-        // 2. Define a minimum lookahead distance (base)
-        // A value between 7 and 10 is usually good for VEX to keep it from "hunting" at low speeds.
-        const float minLookahead = 8.0; 
-
-        // 3. Calculate the dynamic lookahead distance
-        // Here, params.lookahead acts as the 'K' gain
-        float dynamicLookahead = minLookahead + (currentVel * params.lookahead);
-
-        // 4. (Optional) Cap the lookahead to prevent it from getting too large at max speed
-        dynamicLookahead = std::min(dynamicLookahead, 25.0f); 
-
         // 5. Pass dynamicLookahead into your lookaheadPoint function
-        lookaheadPose = lookaheadPoint(lastLookahead, pose, pathPoints, closestPoint, dynamicLookahead);
+        lookaheadPose = lookaheadPoint(lastLookahead, pose, pathPoints, closestPoint, params.lookahead);
         lastLookahead = lookaheadPose; // update last lookahead position
 
         // get the curvature of the arc between the robot and the lookahead point
