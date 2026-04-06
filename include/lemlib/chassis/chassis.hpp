@@ -411,8 +411,10 @@ struct PursuitToPoseParams {
         float resolution = 0.1;
         /** The turning radius used to generate curves. Defaults to 1.5 times the wheel base width */
         float turningRadius = 0;
-        /** circle radius where to look for the next point to travel to. */
-        float lookahead = 9;
+        /** ramsette zeta */
+        float zeta = 0.7;
+        /** ramsette b */
+        float b = 2.0;
         /** distance between the robot and target point where the movement will exit. Only has an effect if minSpeed is
          * non-zero.*/
         float earlyExitRange = 0;
