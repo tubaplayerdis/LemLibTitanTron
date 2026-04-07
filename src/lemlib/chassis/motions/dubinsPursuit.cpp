@@ -5,6 +5,8 @@
 #include "lemlib/chassis/chassis.hpp"
 #include "lemlib/util.hpp"
 
+
+
 constexpr double PI = 3.14159265358979323846;
 
 // ------------------- Math Helpers -------------------
@@ -205,7 +207,7 @@ std::vector<lemlib::Pose> planDubins(double sx, double sy, double syaw, double g
         result.emplace_back(
             gx2,
             gy2,
-            gyaw2 * 180.0 / PI
+            gyaw2// * 180.0 / PI keep in radians
         );
     }
 
@@ -247,6 +249,8 @@ void lemlib::Chassis::pursuitToPose(float x, float y, float theta, int timeout, 
         return;
     }
 
+    std::vector<std::pair<lemlib::Pose, float>> path_points_r;
+
     //replace theta values with power values
     for (int i = 0; i < pathPoints.size(); i++) {
         // Start with the maximum allowed speed
@@ -279,18 +283,19 @@ void lemlib::Chassis::pursuitToPose(float x, float y, float theta, int timeout, 
 
         if(params.minSpeedOverride && target < params.minSpeed) target = params.minSpeed;
         // Save calculated velocity into theta
-        pathPoints.at(i).theta = target;
+        path_points_r.at(i).first = pathPoints.at(i);
+        path_points_r.at(i).second = target;
     }
 
     // 2. Ensure the very last point is exactly 0 to trigger the loop break
-    pathPoints.back().theta = 0;
+    path_points_r.back().second = 0;
 
     if(params.outputDebug)
     {
         std::ofstream pathDebugOutput("PathingDebug.txt", std::ios::app);
-        for (int i = 0; i < pathPoints.size(); i++)
+        for (int i = 0; i < path_points_r.size(); i++)
         {
-            pathDebugOutput << pathPoints[i].x << ", " << pathPoints[i].y << ", " << pathPoints[i].theta << std::endl;
+            pathDebugOutput << path_points_r[i].first.x << ", " << path_points_r[i].first.y << ", " << path_points_r[i].first.theta << std::endl;
         }
         pathDebugOutput << "\n\n\n";
     }
@@ -314,67 +319,54 @@ void lemlib::Chassis::pursuitToPose(float x, float y, float theta, int timeout, 
 
     bool ranEarlyLambda = false;
 
-    // loop until the robot is within the end tolerance
+    // Replace the Pure Pursuit loop logic with this Ramsete logic
     for (int i = 0; i < timeout / 10 && pros::competition::get_status() == compState && this->motionRunning; i++) {
-        // get the current position of the robot
+        // Inside the for loop...
         pose = this->getPose(true);
         if (!params.forwards) pose.theta -= M_PI;
 
-        // update completion vars
-        distTraveled += pose.distance(lastPose);
-        lastPose = pose;
+        // 1. Find the closest point in the new pair-based vector
+        // Note: You'll need to update findClosest to handle the std::pair structure
+        closestPoint = findClosest(pose, pathPoints); 
 
-        // find the closest point on the path to the robot
-        closestPoint = findClosest(pose, pathPoints);
-        // if the robot is at the end of the path, then stop
-        if (pathPoints.at(closestPoint).theta == 0) break;
+        // 2. Break if velocity target is 0 (end of path)
+        if (path_points_r.at(closestPoint).second == 0) break;
 
-        // 5. Pass dynamicLookahead into your lookaheadPoint function
-        lookaheadPose = lookaheadPoint(lastLookahead, pose, pathPoints, closestPoint, params.lookahead);
-        lastLookahead = lookaheadPose; // update last lookahead position
+        // 3. Extract Target Data
+        lemlib::Pose targetPose = path_points_r.at(closestPoint).first;
+        float v_d = path_points_r.at(closestPoint).second; // Desired linear velocity
 
-        // get the curvature of the arc between the robot and the lookahead point
-        float curvatureHeading = M_PI / 2 - pose.theta;
-        curvature = findLookaheadCurvature(pose, curvatureHeading, lookaheadPose);
-
-        // get the target velocity of the robot
-        targetVel = pathPoints.at(closestPoint).theta;
-        targetVel = slew(targetVel, prevVel, lateralSettings.slew);
-        prevVel = targetVel;
-
-        // calculate target left and right velocities
-        float targetLeftVel = targetVel * (2 + curvature * drivetrain.trackWidth) / 2;
-        float targetRightVel = targetVel * (2 - curvature * drivetrain.trackWidth) / 2;
-
-        // ratio the speeds to respect the max speed
-        float ratio = std::max(std::fabs(targetLeftVel), std::fabs(targetRightVel)) / 127;
-        if (ratio > 1) {
-            targetLeftVel /= ratio;
-            targetRightVel /= ratio;
+        // 4. Calculate Desired Angular Velocity (w_d)
+        // w = v * curvature. We calculate local curvature from the path points.
+        float k_d = 0;
+        if (closestPoint < path_points_r.size() - 1) {
+            k_d = findLookaheadCurvature(path_points_r.at(closestPoint).first, 0, path_points_r.at(closestPoint+1).first);
         }
+        float w_d = v_d * k_d;
 
-        // calculate distance to the target point
-        const float distTarget = pose.distance(target);
+        // 5. Calculate Errors in the Robot's Local Frame
+        float dX = targetPose.x - pose.x;
+        float dY = targetPose.y - pose.y;
+        float eTheta = angleMod(targetPose.theta - (pose.theta * PI / 180.0)); // Ensure radians
 
-        // check whether the robot is close enough to execute the early lambda
-        if (distTarget <= params.earlyLambdaRange && params.earlyLambda != nullptr && !ranEarlyLambda)
-        {
-            new pros::Task(params.earlyLambda);
-            ranEarlyLambda = true;
-        }
+        float eX = cos(pose.theta * PI / 180.0) * dX + sin(pose.theta * PI / 180.0) * dY;
+        float eY = -sin(pose.theta * PI / 180.0) * dX + cos(pose.theta * PI / 180.0) * dY;
 
-        // update previous velocities
-        prevLeftVel = targetLeftVel;
-        prevRightVel = targetRightVel;
+        // 6. Ramsete Gain Calculation
+        // Standard gains: b = 2.0, zeta = 0.7
+        float b = params.b; 
+        float zeta = params.zeta;
+        float k = 2 * zeta * sqrt(pow(w_d, 2) + b * pow(v_d, 2));
 
-        // move the drivetrain
-        if (params.forwards) {
-            drivetrain.leftMotors->move(targetLeftVel);
-            drivetrain.rightMotors->move(targetRightVel);
-        } else {
-            drivetrain.leftMotors->move(-targetRightVel);
-            drivetrain.rightMotors->move(-targetLeftVel);
-        }
+        // 7. Compute Adjusted Velocities
+        float v = v_d * cos(eTheta) + k * eX;
+        // Sinc function (sin(x)/x) handles the case where eTheta is near zero
+        float sinc = (std::abs(eTheta) < 1e-4) ? 1.0 : sin(eTheta) / eTheta;
+        float w = w_d + b * v_d * sinc * eY + k * eTheta;
+
+        // 8. Output to Motors (Inverse Kinematics)
+        float targetLeftVel = v + (w * drivetrain.trackWidth / 2);
+        float targetRightVel = v - (w * drivetrain.trackWidth / 2);
 
         pros::delay(10);
     }
