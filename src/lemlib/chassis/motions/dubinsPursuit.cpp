@@ -207,7 +207,7 @@ std::vector<lemlib::Pose> planDubins(double sx, double sy, double syaw, double g
         result.emplace_back(
             gx2,
             gy2,
-            gyaw2// * 180.0 / PI keep in radians
+            gyaw2 * 180.0 / PI
         );
     }
 
@@ -283,8 +283,8 @@ void lemlib::Chassis::pursuitToPose(float x, float y, float theta, int timeout, 
 
         if(params.minSpeedOverride && target < params.minSpeed) target = params.minSpeed;
         // Save calculated velocity into theta
-        path_points_r.at(i).first = pathPoints.at(i);
-        path_points_r.at(i).second = target;
+        pathPoints[i].theta = degToRad(pathPoints[i].theta);
+        path_points_r.push_back(std::pair<lemlib::Pose, float>(pathPoints.at(i), target));
     }
 
     // 2. Ensure the very last point is exactly 0 to trigger the loop break
@@ -298,6 +298,13 @@ void lemlib::Chassis::pursuitToPose(float x, float y, float theta, int timeout, 
             pathDebugOutput << path_points_r[i].first.x << ", " << path_points_r[i].first.y << ", " << path_points_r[i].first.theta << std::endl;
         }
         pathDebugOutput << "\n\n\n";
+
+        std::ofstream pathDebugOutputTwo("PathingDebugTwo.txt", std::ios::app);
+        for (int i = 0; i < path_points_r.size(); i++)
+        {
+            pathDebugOutputTwo << pathPoints[i].x << ", " << pathPoints[i].y << ", " << pathPoints[i].theta << std::endl;
+        }
+        pathDebugOutputTwo << "\n\n\n";
     }
 
 
