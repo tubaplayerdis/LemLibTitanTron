@@ -17,6 +17,13 @@ namespace DubinsMath {
 
     const double PI = 3.14159265358979323846;
 
+    struct PathPoint
+    {
+        lemlib::Pose pose;
+        float v;
+        float t;
+    };
+
     struct SegmentLengths {
         double len[3];
         std::string mode;
@@ -166,8 +173,8 @@ namespace DubinsMath {
 
 
 /**
- * Generates an optimal Dubins path 
- * * @param s_x Start X position
+ * Generates an optimal Dubins path with embedded velocity and time profiles
+ * @param s_x Start X position
  * @param s_y Start Y position
  * @param s_yaw Start Yaw angle (radians)
  * @param g_x Goal X position
@@ -175,11 +182,17 @@ namespace DubinsMath {
  * @param g_yaw Goal Yaw angle (radians)
  * @param curvature The curvature limit (1.0 / radius)
  * @param step_size The spacing between generated points on the path
- * @return A vector of lemlib::Pose objects representing the global trajectory
+ * @param minSpeed Minimum velocity limit (0-127)
+ * @param maxSpeed Maximum velocity limit (0-127)
+ * @param horizontalDrift Drift constant for cornering speeds
+ * @return A vector of DubinsMath::PathPoint objects
  */
-std::vector<lemlib::Pose> generate_dubins_path(double s_x, double s_y, double s_yaw, 
-                                               double g_x, double g_y, double g_yaw, 
-                                               double curvature, double step_size = 0.1) {
+std::vector<DubinsMath::PathPoint> generate_dubins_path(
+    double s_x, double s_y, double s_yaw, 
+    double g_x, double g_y, double g_yaw, 
+    double curvature, double step_size,
+    float minSpeed, float maxSpeed, float horizontalDrift) 
+{
     using namespace DubinsMath;
 
     // 1. Calculate local goal (x, y, yaw) relative to start
@@ -199,7 +212,6 @@ std::vector<lemlib::Pose> generate_dubins_path(double s_x, double s_y, double s_
     double best_cost = std::numeric_limits<double>::infinity();
     SegmentLengths best_seg;
 
-    // Test all planners mapping directly to the python func map
     std::vector<SegmentLengths> planners = {
         LSL(alpha, beta, d), RSR(alpha, beta, d), LSR(alpha, beta, d),
         RSL(alpha, beta, d), RLR(alpha, beta, d), LRL(alpha, beta, d)
@@ -207,7 +219,6 @@ std::vector<lemlib::Pose> generate_dubins_path(double s_x, double s_y, double s_
 
     for (const auto& seg : planners) {
         if (!seg.valid) continue;
-        
         double cost = std::abs(seg.len[0]) + std::abs(seg.len[1]) + std::abs(seg.len[2]);
         if (cost < best_cost) {
             best_cost = cost;
@@ -241,184 +252,225 @@ std::vector<lemlib::Pose> generate_dubins_path(double s_x, double s_y, double s_
     }
 
     // 4. Convert local trajectory back to the global coordinate frame
-    std::vector<lemlib::Pose> final_path;
-    final_path.reserve(lp_x.size());
+    std::vector<lemlib::Pose> raw_poses;
+    raw_poses.reserve(lp_x.size());
     
     for (size_t i = 0; i < lp_x.size(); i++) {
-        // Rotate local coordinates back by the starting yaw, then translate by start position
         double g_x_path = std::cos(s_yaw) * lp_x[i] - std::sin(s_yaw) * lp_y[i] + s_x;
         double g_y_path = std::sin(s_yaw) * lp_x[i] + std::cos(s_yaw) * lp_y[i] + s_y;
         double g_yaw_path = angle_mod(lp_yaw[i] + s_yaw);
-        
-        final_path.push_back(lemlib::Pose(g_x_path, g_y_path, g_yaw_path));
+        raw_poses.push_back(lemlib::Pose(g_x_path, g_y_path, g_yaw_path));
+    }
+
+    // 5. Compute "Distance to End" for all points efficiently (O(N) backwards pass)
+    std::vector<float> dist_to_end(raw_poses.size(), 0.0f);
+    for (int i = raw_poses.size() - 2; i >= 0; i--) {
+        dist_to_end[i] = dist_to_end[i+1] + raw_poses[i].distance(raw_poses[i+1]);
+    }
+
+    // 6. Compute Velocity and Time Profile
+    std::vector<DubinsMath::PathPoint> final_path;
+    final_path.reserve(raw_poses.size());
+    float current_time = 0.0f;
+    
+    // Constant for converting VEX velocity (0-127) to real-world Inches Per Second (IPS)
+    // You may need to tune this constant (e.g., 45.0) to match your physical robot's top speed!
+    const float MAX_ROBOT_IPS = 45.0f; 
+
+    for (int i = 0; i < raw_poses.size(); i++) {
+        float target_v = maxSpeed;
+
+        // A. Curvature Slowdown
+        if (i > 0 && i < raw_poses.size() - 1) {
+            float dist = raw_poses[i-1].distance(raw_poses[i+1]);
+            // Calculate change in angle over distance
+            float dTheta = angle_mod(raw_poses[i+1].theta - raw_poses[i-1].theta);
+            float local_curv = (dist > 0.001f) ? std::abs(dTheta) / dist : 0.0f;
+
+            if (local_curv > 0.01f) {
+                target_v = std::min(target_v, 127.0f / (1.0f + local_curv * horizontalDrift));
+            }
+        }
+
+        // B. Distance-to-End Deceleration (The "Brake")
+        float brakeDistance = 12.0f; 
+        if (dist_to_end[i] < brakeDistance) {
+            target_v = std::min(target_v, (dist_to_end[i] / brakeDistance) * maxSpeed + 15.0f);
+        }
+
+        // C. Apply Minimum Speed limits
+        if (target_v < minSpeed && i != raw_poses.size() - 1) {
+            target_v = minSpeed;
+        }
+
+        // D. Ensure the final point is 0 velocity to trigger stops
+        if (i == raw_poses.size() - 1) {
+            target_v = 0.0f;
+        }
+
+        // E. Integrate Time (dt = distance / velocity)
+        if (i > 0) {
+            float step_dist = raw_poses[i-1].distance(raw_poses[i]);
+            // Convert target_v (0-127) to real world Inches Per Second.
+            // std::max prevents division by zero if target_v drops very low
+            float v_ips = std::max(target_v * (MAX_ROBOT_IPS / 127.0f), 0.5f); 
+            current_time += step_dist / v_ips;
+        }
+
+        final_path.push_back({raw_poses[i], target_v, current_time});
     }
 
     return final_path;
 }
 
+/**
+ * @brief find the closest point on the path to the robot within a safe forward window
+ *
+ * @param pose the current pose of the robot
+ * @param path the path to follow
+ * @param lastIndex the closest point found in the previous loop iteration
+ * @param searchWindow how many points ahead to allow searching (default is 10)
+ * @return int index to the closest point
+ */
+int findClosestNew(lemlib::Pose pose, const std::vector<lemlib::Pose>& path, int lastIndex, int searchWindow = 10) {
+    int closestPoint = lastIndex;
+    float closestDist = std::numeric_limits<float>::infinity();
+
+    // Calculate the max index we are allowed to check to prevent skipping turns
+    // std::min prevents us from checking past the end of the path array
+    int endIndex = std::min((int)path.size(), lastIndex + searchWindow);
+
+    // Only loop through points from where we currently are, up to the search limit
+    for (int i = lastIndex; i < endIndex; i++) {
+        const float dist = pose.distance(path.at(i));
+        if (dist < closestDist) { // new closest point
+            closestDist = dist;
+            closestPoint = i;
+        }
+    }
+
+    return closestPoint;
+}
+
 void lemlib::Chassis::ramsetteToPose(float x, float y, float theta, int timeout, RamsetteToPoseParams params, bool async)
 {
     this->requestMotionStart();
-    // were all motions cancelled?
     if (!this->motionRunning) return;
-    // if the function is async, run it in a new task
+    
     if (async) {
         pros::Task task([&]() { ramsetteToPose(x, y, theta, timeout, params, false); });
         this->endMotion();
-        pros::delay(10); // delay to give the task time to start
+        pros::delay(10);
         return;
     }
 
     lemlib::Pose target(x, y, theta);
-
-
-    if(params.turningRadius == 0) params.turningRadius = drivetrain.trackWidth * 1.5;
-
-    float pathCurvature =  1.00f / params.turningRadius;
-
-    // Use default horizontial drift from the drivetrain class
-    if(params.horizontalDrift == 0) params.horizontalDrift = drivetrain.horizontalDrift;
-
     lemlib::Pose startPos = getPose();
 
-    std::vector<lemlib::Pose> pathPoints = generate_dubins_path(startPos.x, startPos.y, atan2(target.y - startPos.y, target.x - startPos.x), target.x, target.y, degToRad(target.theta - 90.0f), pathCurvature, params.resolution); // get list of path points
+    if(params.turningRadius == 0) params.turningRadius = drivetrain.trackWidth * 0.75;
+    float pathCurvature = 1.00f / params.turningRadius;
+    if(params.horizontalDrift == 0) params.horizontalDrift = drivetrain.horizontalDrift;
+
+    // --- Generate the path with velocities and times embedded ---
+    
+    // LemLib's getPose() without parameters returns DEGREES. 
+    // Convert both the starting heading and target heading to Standard Math Radians
+    float math_start_yaw = (90.0f - startPos.theta) * (M_PI / 180.0f);
+    float math_end_yaw = (90.0f - target.theta) * (M_PI / 180.0f);
+
+    std::vector<DubinsMath::PathPoint> pathPoints = generate_dubins_path(
+        startPos.x, startPos.y, math_start_yaw, 
+        target.x, target.y, math_end_yaw, 
+        pathCurvature, params.resolution, 
+        params.minSpeed, params.maxSpeed, params.horizontalDrift
+    );
+
     if (pathPoints.size() == 0) {
-        // set distTraveled to -1 to indicate that the function has finished
         distTraveled = -1;
-        // give the mutex back
         this->endMotion();
         return;
     }
 
-    std::vector<std::pair<lemlib::Pose, float>> path_points_r;
-
-    //replace theta values with power values
-    for (int i = 0; i < pathPoints.size(); i++) {
-        // Start with the maximum allowed speed
-        float target = params.maxSpeed;
-
-        // A. Curvature-Based Velocity (Automatic Slowdown for sharp turns)
-        // We calculate the distance between points to find local curvature
-        if (i > 0 && i < pathPoints.size() - 1) {
-            float curvature = findLookaheadCurvature(pathPoints.at(i-1), 0, pathPoints.at(i+1));
-            if (std::abs(curvature) > 0.01) {
-                // Formula: velocity = sqrt(max_centripetal_accel / curvature)
-                // Simplified: lower speed as curvature increases
-                target = std::min(target, 127.0f / (1.0f + std::abs(curvature) * params.horizontalDrift));
-            }
-        }
-
-        // B. Distance-to-End Deceleration (The "Brake")
-        float distToEnd = 0;
-        for (int j = i; j < pathPoints.size() - 1; j++) {
-            distToEnd += pathPoints.at(j).distance(pathPoints.at(j+1));
-        }
-
-        // Linear ramp down: if within 12 inches, start slowing down
-        float brakeDistance = 12.0; 
-        if (distToEnd < brakeDistance) {
-            target = std::min(target, (distToEnd / brakeDistance) * params.maxSpeed + 15);
-
-            if(target < params.minSpeed) target = params.minSpeed;
-        }
-
-        if(params.minSpeedOverride && target < params.minSpeed) target = params.minSpeed;
-        // Save calculated velocity into theta
-        pathPoints[i].theta = DubinsMath::PI/2 - pathPoints[i].theta;
-        path_points_r.push_back(std::pair<lemlib::Pose, float>(pathPoints.at(i), target));
-    }
-
-    // 2. Ensure the very last point is exactly 0 to trigger the loop break
-    path_points_r.back().second = 0;
-
-    if(params.outputDebug)
-    {
-        for (int i = 0; i < path_points_r.size(); i++)
-        {
-            std::cout << pathPoints[i].x << ", " << pathPoints[i].y << ", " << pathPoints[i].theta << std::endl;
+    if(params.outputDebug) {
+        for (const auto& pt : pathPoints) {
+            std::cout << pt.pose.x << ", " << pt.pose.y << ", " << pt.pose.theta << " | v: " << pt.v << " t: " << pt.t << std::endl;
         }
     }
 
-
+    // --- State Variables ---
     Pose pose = this->getPose(true);
-    Pose lastPose = pose;
-    Pose lookaheadPose(0, 0, 0);
-    Pose lastLookahead = pathPoints.at(0);
-    lastLookahead.theta = 0;
-    float curvature;
-    float targetVel;
-    float prevLeftVel = 0;
-    float prevRightVel = 0;
-    int closestPoint;
-    float leftInput = 0;
-    float rightInput = 0;
-    float prevVel = 0;
+    int targetIndex = 0; // Replaces closestPoint
     int compState = pros::competition::get_status();
     distTraveled = 0;
 
-    bool ranEarlyLambda = false;
+    // Start a timer right before the loop begins
+    uint32_t startTime = pros::millis();
 
-    // Replace the Pure Pursuit loop logic with this Ramsete logic
+    // --- Ramsete Tracking Loop ---
     for (int i = 0; i < timeout / 10 && pros::competition::get_status() == compState && this->motionRunning; i++) {
-        // Inside the for loop...
         pose = this->getPose(true);
-        if (!params.forwards) pose.theta -= M_PI;
+        if (!params.forwards) pose.theta -= M_PI; //This needs to be revered for some reason. IDK why tho
 
-        // 1. Find the closest point in the new pair-based vector
-        // Note: You'll need to update findClosest to handle the std::pair structure
-        closestPoint = findClosest(pose, pathPoints); 
+        // 1. Time-Based Index Searching
+        // Calculate elapsed time in seconds
+        float elapsedTime = (pros::millis() - startTime) / 1000.0f; 
 
-        // 2. Break if velocity target is 0 (end of path)
-        if (path_points_r.at(closestPoint).second == 0) break;
+        // Advance the target index until its expected time matches or exceeds our real elapsed time
+        while (targetIndex < pathPoints.size() - 1 && pathPoints[targetIndex].t < elapsedTime) {
+            targetIndex++;
+        }
 
-        // 3. Extract Target Data
-        lemlib::Pose targetPose = path_points_r.at(closestPoint).first;
-        float v_d = path_points_r.at(closestPoint).second;
+        // 2. Break Conditions
+        // Stop if we have reached the end of the time array, OR if we physically hit the end early
+        if (targetIndex >= pathPoints.size() - 1 || pose.distance(pathPoints.back().pose) < 3.0) {
+            break;
+        }
 
-        // Convert LemLib degrees/radians to Standard Math Radians (0=East, CCW)
-        // targetPose.theta is in degrees from the Dubins generator
-        float math_target_theta = DubinsMath::PI / 2.0 - targetPose.theta;
-        // pose.theta from getPose(true) is in radians
-        float math_pose_theta = DubinsMath::PI / 2.0 - pose.theta; 
+        // 3. Extract Target Data based on the current TIME
+        lemlib::Pose targetPose = pathPoints.at(targetIndex).pose;
+        float v_d = pathPoints.at(targetIndex).v; 
+
+        // --- Coordinate Conversions ---
+        float theta_actual = (M_PI / 2.0) - pose.theta;
+        float theta_desired = targetPose.theta;
 
         // 4. Calculate Desired Angular Velocity (w_d)
         float k_d = 0;
-        if (closestPoint < path_points_r.size() - 1) {
-            k_d = findLookaheadCurvature(path_points_r.at(closestPoint).first, 0, path_points_r.at(closestPoint+1).first);
+        if (targetIndex < pathPoints.size() - 1) {
+            k_d = findLookaheadCurvature(pathPoints.at(targetIndex).pose, 0, pathPoints.at(targetIndex+1).pose);
         }
         float w_d = v_d * k_d;
 
-        // 5. Calculate Errors in the Robot's Local Frame (Using Math Radians)
+        // 5. Compute Error
         float dX = targetPose.x - pose.x;
         float dY = targetPose.y - pose.y;
-        float eTheta = DubinsMath::angle_mod(math_target_theta - math_pose_theta);
+        
+        float eX = cos(theta_actual) * dX + sin(theta_actual) * dY;
+        float eY = -sin(theta_actual) * dX + cos(theta_actual) * dY;
+        float eTheta = DubinsMath::angle_mod(theta_desired - theta_actual);
 
-        float eX = cos(math_pose_theta) * dX + sin(math_pose_theta) * dY;
-        float eY = -sin(math_pose_theta) * dX + cos(math_pose_theta) * dY;
-
-        // 6. Ramsete Gain Calculation
+        // 6. Compute Ramsete Gain & Velocity Adjustments
         float b = params.b; 
         float zeta = params.zeta;
         float k = 2 * zeta * sqrt(pow(w_d, 2) + b * pow(v_d, 2));
 
-        // 7. Compute Adjusted Velocities
         float v = v_d * cos(eTheta) + k * eX;
         float sinc = (std::abs(eTheta) < 1e-4) ? 1.0 : sin(eTheta) / eTheta;
-        float w = w_d + b * v_d * sinc * eY + k * eTheta;
+        float w = w_d + k * eTheta + (b * v_d * sinc * eY);
 
-        // 8. Output to Motors (Inverse Kinematics)
-        float targetLeftVel = v - (w * drivetrain.trackWidth / 2);
-        float targetRightVel = v + (w * drivetrain.trackWidth / 2);
+        // 7. Inverse Kinematics
+        float angularMotorVelocity = w * drivetrain.trackWidth / 2.0;
+        float targetLeftVel = v + angularMotorVelocity;
+        float targetRightVel = v - angularMotorVelocity;
 
-        // NEW: Proportional Desaturation
-        // If the math requests more than 127, scale BOTH sides down equally
-        // so the robot preserves its curved trajectory.
+        // Desaturation
         float max_mag = std::max(std::abs(targetLeftVel), std::abs(targetRightVel));
         if (max_mag > 127.0) {
             targetLeftVel = (targetLeftVel / max_mag) * 127.0;
             targetRightVel = (targetRightVel / max_mag) * 127.0;
         }
 
+        // Final Motor Output
         if (params.forwards) {
             drivetrain.leftMotors->move(targetLeftVel);
             drivetrain.rightMotors->move(targetRightVel);
@@ -432,11 +484,8 @@ void lemlib::Chassis::ramsetteToPose(float x, float y, float theta, int timeout,
 
     std::cout << "Done!" << std::endl;
 
-    // stop the robot
     drivetrain.leftMotors->move(0);
     drivetrain.rightMotors->move(0);
-    // set distTraveled to -1 to indicate that the function has finished
     distTraveled = -1;
-    // give the mutex back
     this->endMotion();
 }

@@ -453,7 +453,7 @@ def main():
 
     sl_sx   = Slider(make_slider_ax(0), 'Start X', -72.0, 72.0, valinit=s_x)
     sl_sy   = Slider(make_slider_ax(1), 'Start Y', -72.0, 72.0, valinit=s_y)
-    #sl_syaw = Slider(make_slider_ax(2), 'Start Yaw', 0.0, 360.0, valinit=s_yaw_deg)
+    sl_syaw = Slider(make_slider_ax(2), 'Start Yaw', 0.0, 360.0, valinit=s_yaw_deg)
     sl_ex   = Slider(make_slider_ax(3), 'End X', -72.0, 72.0, valinit=e_x)
     sl_ey   = Slider(make_slider_ax(4), 'End Y', -72.0, 72.0, valinit=e_y)
     sl_eyaw = Slider(make_slider_ax(5), 'End Yaw', 0.0, 360.0, valinit=e_yaw_deg)
@@ -465,13 +465,11 @@ def main():
         # Get values from sliders
         cur_sx = sl_sx.val
         cur_sy = sl_sy.val
-        #cur_syaw = np.deg2rad(atan2())
+        cur_syaw = np.deg2rad(90 - sl_syaw.val)
         cur_ex = sl_ex.val
         cur_ey = sl_ey.val
-        cur_eyaw = np.deg2rad(sl_eyaw.val - 90)
+        cur_eyaw = np.deg2rad(90 - sl_eyaw.val)
         cur_rad = sl_rad.val
-
-        cur_syaw = atan2(cur_ey - cur_sy, cur_ex - cur_sx);
         
         # Calculate Path
         px, py, pyaw, mode, lengths = plan_dubins_path(

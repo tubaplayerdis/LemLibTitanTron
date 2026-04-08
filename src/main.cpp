@@ -122,7 +122,7 @@ void disabled() {}
 void competition_initialize() {}
 
 // get a path used for pure pursuit
-// this needs to be put outside a function
+// this needs to be put outside a function 
 ASSET(example_txt); // '.' replaced with "_" to make c++ happy
 
 /**
@@ -132,8 +132,15 @@ ASSET(example_txt); // '.' replaced with "_" to make c++ happy
  */
 void autonomous() {
     // Move to x: 20 and y: 15, and face heading 90. Timeout set to 4000 ms
+    
     chassis.setPose(-45, -25, 0);
-    chassis.ramsetteToPose(-13.4, 23.2, 90, 5000, {.outputDebug=true}, false);
+    chassis.ramsetteToPose(-13.4, 23.2, 90, 5000, {.b = 2.0, .outputDebug=true}, true);
+    while(true)
+    {
+        auto pos = chassis.getPose(true);
+        std::cout << pos.x << ", " << pos.y << ", " << pos.theta << std::endl;
+        pros::delay(20);
+    }
 }
 
 /**
