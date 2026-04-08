@@ -395,7 +395,7 @@ struct MoveToPointParams {
         std::function<void()> earlyLambda = nullptr;
 };
 
-struct PursuitToPoseParams {
+struct RamsetteToPoseParams {
         /** whether the robot should move forwards or backwards. True by default */
         bool forwards = true;
         /** how fast the robot will move around corners. Recommended value 2-15. 0 means use horizontalDrift set in
@@ -414,7 +414,7 @@ struct PursuitToPoseParams {
         /** ramsette zeta */
         float zeta = 0.7;
         /** ramsette b */
-        float b = 2.0;
+        float b = 0.1;
         /** distance between the robot and target point where the movement will exit. Only has an effect if minSpeed is
          * non-zero.*/
         float earlyExitRange = 0;
@@ -799,7 +799,7 @@ class Chassis {
          */
         void moveToPoint(float x, float y, int timeout, MoveToPointParams params = {}, bool async = true);
         /**
-         * @brief Drive to a point following the most optimal Dubins path using pure pursuit.
+         * @brief Drive to a point following the most optimal Dubins path using ramsette.
          * 
          * @param x x location
          * @param y y location
@@ -808,7 +808,7 @@ class Chassis {
          * @param params struct to simulate named parameters
          * @param async whether the function should be run asynchronously. true by default
          */
-        void pursuitToPose(float x, float y, float theta, int timeout, PursuitToPoseParams params = {}, bool async = true);
+        void ramsetteToPose(float x, float y, float theta, int timeout, RamsetteToPoseParams params = {}, bool async = true);
         /**
          * @brief Move the chassis along a path
          *

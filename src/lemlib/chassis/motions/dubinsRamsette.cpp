@@ -256,14 +256,14 @@ std::vector<lemlib::Pose> generate_dubins_path(double s_x, double s_y, double s_
     return final_path;
 }
 
-void lemlib::Chassis::pursuitToPose(float x, float y, float theta, int timeout, PursuitToPoseParams params, bool async)
+void lemlib::Chassis::ramsetteToPose(float x, float y, float theta, int timeout, RamsetteToPoseParams params, bool async)
 {
     this->requestMotionStart();
     // were all motions cancelled?
     if (!this->motionRunning) return;
     // if the function is async, run it in a new task
     if (async) {
-        pros::Task task([&]() { pursuitToPose(x, y, theta, timeout, params, false); });
+        pros::Task task([&]() { ramsetteToPose(x, y, theta, timeout, params, false); });
         this->endMotion();
         pros::delay(10); // delay to give the task time to start
         return;
@@ -409,6 +409,15 @@ void lemlib::Chassis::pursuitToPose(float x, float y, float theta, int timeout, 
         // 8. Output to Motors (Inverse Kinematics)
         float targetLeftVel = v - (w * drivetrain.trackWidth / 2);
         float targetRightVel = v + (w * drivetrain.trackWidth / 2);
+
+        // NEW: Proportional Desaturation
+        // If the math requests more than 127, scale BOTH sides down equally
+        // so the robot preserves its curved trajectory.
+        float max_mag = std::max(std::abs(targetLeftVel), std::abs(targetRightVel));
+        if (max_mag > 127.0) {
+            targetLeftVel = (targetLeftVel / max_mag) * 127.0;
+            targetRightVel = (targetRightVel / max_mag) * 127.0;
+        }
 
         if (params.forwards) {
             drivetrain.leftMotors->move(targetLeftVel);

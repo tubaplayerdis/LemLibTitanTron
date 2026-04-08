@@ -133,7 +133,7 @@ ASSET(example_txt); // '.' replaced with "_" to make c++ happy
 void autonomous() {
     // Move to x: 20 and y: 15, and face heading 90. Timeout set to 4000 ms
     chassis.setPose(-45, -25, 0);
-    chassis.pursuitToPose(-13.4, 23.2, 90, 5000, {.outputDebug=true}, false);
+    chassis.ramsetteToPose(-13.4, 23.2, 90, 5000, {.outputDebug=true}, false);
 }
 
 /**
