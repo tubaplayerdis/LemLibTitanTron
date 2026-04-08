@@ -1,217 +1,259 @@
 #include <vector>
-#include <cmath>
-#include <limits>
-#include <fstream>
 #include "lemlib/chassis/chassis.hpp"
 #include "lemlib/util.hpp"
 
 
 
-constexpr double PI = 3.14159265358979323846;
+#include <cmath>
+#include <vector>
+#include <string>
+#include <limits>
+#include <algorithm>
 
-// ------------------- Math Helpers -------------------
+// Assuming lemlib::Pose is available in your project environment
+// #include "lemlib/api.hpp" 
 
-double mod2pi(double x) {
-    double v = fmod(x, 2.0 * PI);
-    if (v < 0) v += 2.0 * PI;
-    return v;
-}
+namespace DubinsMath {
 
-double angleMod(double x) {
-    return mod2pi(x + PI) - PI;
-}
+    const double PI = 3.14159265358979323846;
 
-// ------------------- Path Types -------------------
+    struct SegmentLengths {
+        double len[3];
+        std::string mode;
+        bool valid;
+    };
 
-bool LSL(double a, double b, double d, double& d1, double& d2, double& d3) {
-    double p2 = 2 + d*d - 2*cos(a-b) + 2*d*(sin(a)-sin(b));
-    if (p2 < 0) return false;
-
-    double tmp = atan2(cos(b)-cos(a), d + sin(a) - sin(b));
-    d1 = mod2pi(-a + tmp);
-    d2 = sqrt(p2);
-    d3 = mod2pi(b - tmp);
-    return true;
-}
-
-bool RSR(double a, double b, double d, double& d1, double& d2, double& d3) {
-    double p2 = 2 + d*d - 2*cos(a-b) + 2*d*(sin(b)-sin(a));
-    if (p2 < 0) return false;
-
-    double tmp = atan2(cos(a)-cos(b), d - sin(a) + sin(b));
-    d1 = mod2pi(a - tmp);
-    d2 = sqrt(p2);
-    d3 = mod2pi(-b + tmp);
-    return true;
-}
-
-bool LSR(double a, double b, double d, double& d1, double& d2, double& d3) {
-    double p2 = -2 + d*d + 2*cos(a-b) + 2*d*(sin(a)+sin(b));
-    if (p2 < 0) return false;
-
-    d2 = sqrt(p2);
-    double tmp = atan2(-cos(a)-cos(b), d + sin(a) + sin(b) - atan2(-2.0, d2));
-    d1 = mod2pi(-a + tmp);
-    d3 = mod2pi(-b + tmp);
-    return true;
-}
-
-bool RSL(double a, double b, double d, double& d1, double& d2, double& d3) {
-    double p2 = d*d - 2 + 2*cos(a-b) - 2*d*(sin(a)+sin(b));
-    if (p2 < 0) return false;
-
-    d2 = sqrt(p2);
-    double tmp = atan2(cos(a)+cos(b), d - sin(a) - sin(b)) - atan2(2.0, d2);
-    d1 = mod2pi(a - tmp);
-    d3 = mod2pi(b - tmp);
-    return true;
-}
-
-bool RLR(double a, double b, double d, double& d1, double& d2, double& d3) {
-    double tmp = (6 - d*d + 2*cos(a-b) + 2*d*(sin(a)-sin(b))) / 8.0;
-    if (fabs(tmp) > 1) return false;
-
-    d2 = mod2pi(2*PI - acos(tmp));
-    d1 = mod2pi(a - atan2(cos(a)-cos(b), d - sin(a)+sin(b)) + d2/2);
-    d3 = mod2pi(a - b - d1 + d2);
-    return true;
-}
-
-bool LRL(double a, double b, double d, double& d1, double& d2, double& d3) {
-    double tmp = (6 - d*d + 2*cos(a-b) + 2*d*(-sin(a)+sin(b))) / 8.0;
-    if (fabs(tmp) > 1) return false;
-
-    d2 = mod2pi(2*PI - acos(tmp));
-    d1 = mod2pi(-a - atan2(cos(a)-cos(b), d + sin(a)-sin(b)) + d2/2);
-    d3 = mod2pi(b - a - d1 + d2);
-    return true;
-}
-
-// ------------------- Interpolation -------------------
-
-void interpolate(double length, char mode, double k,
-                 double ox, double oy, double oyaw,
-                 std::vector<double>& px,
-                 std::vector<double>& py,
-                 std::vector<double>& pyaw) {
-
-    if (mode == 'S') {
-        px.push_back(ox + length / k * cos(oyaw));
-        py.push_back(oy + length / k * sin(oyaw));
-        pyaw.push_back(oyaw);
-    } else {
-        double ldx = sin(length) / k;
-        double ldy = (mode == 'L') ?
-            (1 - cos(length)) / k :
-            (1 - cos(length)) / -k;
-
-        double gdx = cos(-oyaw)*ldx + sin(-oyaw)*ldy;
-        double gdy = -sin(-oyaw)*ldx + cos(-oyaw)*ldy;
-
-        px.push_back(ox + gdx);
-        py.push_back(oy + gdy);
-
-        pyaw.push_back(mode == 'L' ? oyaw + length : oyaw - length);
-    }
-}
-
-void generateCourse(const std::vector<double>& lengths,
-                    const std::vector<char>& modes,
-                    double k, double step,
-                    std::vector<double>& px,
-                    std::vector<double>& py,
-                    std::vector<double>& pyaw) {
-
-    px = {0}; py = {0}; pyaw = {0};
-
-    for (int i = 0; i < modes.size(); i++) {
-        double len = lengths[i];
-        if (len == 0) continue;
-
-        double ox = px.back();
-        double oy = py.back();
-        double oyaw = pyaw.back();
-
-        double dist = step;
-        while (fabs(dist + step) <= fabs(len)) {
-            interpolate(dist, modes[i], k, ox, oy, oyaw, px, py, pyaw);
-            dist += step;
+    double mod2pi(double theta) {
+        double mod_angle = std::fmod(theta, 2.0 * PI);
+        if (mod_angle < 0) {
+            mod_angle += 2.0 * PI;
         }
-
-        interpolate(len, modes[i], k, ox, oy, oyaw, px, py, pyaw);
+        return mod_angle;
     }
-}
 
-// ------------------- Main Planner -------------------
+    double angle_mod(double x) {
+        double mod_angle = std::fmod(x + PI, 2.0 * PI);
+        if (mod_angle < 0) {
+            mod_angle += 2.0 * PI;
+        }
+        return mod_angle - PI;
+    }
 
-std::vector<lemlib::Pose> planDubins(double sx, double sy, double syaw, double gx, double gy, double gyaw, double curvature, double step) {
+    SegmentLengths LSL(double alpha, double beta, double d) {
+        double sin_a = std::sin(alpha), sin_b = std::sin(beta);
+        double cos_a = std::cos(alpha), cos_b = std::cos(beta);
+        double cos_ab = std::cos(alpha - beta);
+        
+        double p_squared = 2.0 + d * d - (2.0 * cos_ab) + (2.0 * d * (sin_a - sin_b));
+        if (p_squared < 0) return {{0, 0, 0}, "LSL", false};
+        
+        double tmp = std::atan2((cos_b - cos_a), d + sin_a - sin_b);
+        double d1 = mod2pi(-alpha + tmp);
+        double d2 = std::sqrt(p_squared);
+        double d3 = mod2pi(beta - tmp);
+        
+        return {{d1, d2, d3}, "LSL", true};
+    }
 
-    // Transform to local frame
-    double dx = gx - sx;
-    double dy = gy - sy;
+    SegmentLengths RSR(double alpha, double beta, double d) {
+        double sin_a = std::sin(alpha), sin_b = std::sin(beta);
+        double cos_a = std::cos(alpha), cos_b = std::cos(beta);
+        double cos_ab = std::cos(alpha - beta);
+        
+        double p_squared = 2.0 + d * d - (2.0 * cos_ab) + (2.0 * d * (sin_b - sin_a));
+        if (p_squared < 0) return {{0, 0, 0}, "RSR", false};
+        
+        double tmp = std::atan2((cos_a - cos_b), d - sin_a + sin_b);
+        double d1 = mod2pi(alpha - tmp);
+        double d2 = std::sqrt(p_squared);
+        double d3 = mod2pi(-beta + tmp);
+        
+        return {{d1, d2, d3}, "RSR", true};
+    }
 
-    double lx = cos(syaw)*dx + sin(syaw)*dy;
-    double ly = -sin(syaw)*dx + cos(syaw)*dy;
-    double lyaw = gyaw - syaw;
+    SegmentLengths LSR(double alpha, double beta, double d) {
+        double sin_a = std::sin(alpha), sin_b = std::sin(beta);
+        double cos_a = std::cos(alpha), cos_b = std::cos(beta);
+        double cos_ab = std::cos(alpha - beta);
+        
+        double p_squared = -2.0 + d * d + (2.0 * cos_ab) + (2.0 * d * (sin_a + sin_b));
+        if (p_squared < 0) return {{0, 0, 0}, "LSR", false};
+        
+        double d1 = std::sqrt(p_squared);
+        double tmp = std::atan2((-cos_a - cos_b), (d + sin_a + sin_b)) - std::atan2(-2.0, d1);
+        double d2 = mod2pi(-alpha + tmp);
+        double d3 = mod2pi(-mod2pi(beta) + tmp);
+        
+        return {{d2, d1, d3}, "LSR", true};
+    }
 
-    double D = sqrt(lx*lx + ly*ly);
-    double d = D * curvature;
+    SegmentLengths RSL(double alpha, double beta, double d) {
+        double sin_a = std::sin(alpha), sin_b = std::sin(beta);
+        double cos_a = std::cos(alpha), cos_b = std::cos(beta);
+        double cos_ab = std::cos(alpha - beta);
+        
+        double p_squared = d * d - 2.0 + (2.0 * cos_ab) - (2.0 * d * (sin_a + sin_b));
+        if (p_squared < 0) return {{0, 0, 0}, "RSL", false};
+        
+        double d1 = std::sqrt(p_squared);
+        double tmp = std::atan2((cos_a + cos_b), (d - sin_a - sin_b)) - std::atan2(2.0, d1);
+        double d2 = mod2pi(alpha - tmp);
+        double d3 = mod2pi(beta - tmp);
+        
+        return {{d2, d1, d3}, "RSL", true};
+    }
 
-    double theta = mod2pi(atan2(ly, lx));
+    SegmentLengths RLR(double alpha, double beta, double d) {
+        double sin_a = std::sin(alpha), sin_b = std::sin(beta);
+        double cos_a = std::cos(alpha), cos_b = std::cos(beta);
+        double cos_ab = std::cos(alpha - beta);
+        
+        double tmp = (6.0 - d * d + 2.0 * cos_ab + 2.0 * d * (sin_a - sin_b)) / 8.0;
+        if (std::abs(tmp) > 1.0) return {{0, 0, 0}, "RLR", false};
+        
+        double d2 = mod2pi(2.0 * PI - std::acos(tmp));
+        double d1 = mod2pi(alpha - std::atan2(cos_a - cos_b, d - sin_a + sin_b) + d2 / 2.0);
+        double d3 = mod2pi(alpha - beta - d1 + d2);
+        
+        return {{d1, d2, d3}, "RLR", true};
+    }
+
+    SegmentLengths LRL(double alpha, double beta, double d) {
+        double sin_a = std::sin(alpha), sin_b = std::sin(beta);
+        double cos_a = std::cos(alpha), cos_b = std::cos(beta);
+        double cos_ab = std::cos(alpha - beta);
+        
+        double tmp = (6.0 - d * d + 2.0 * cos_ab + 2.0 * d * (-sin_a + sin_b)) / 8.0;
+        if (std::abs(tmp) > 1.0) return {{0, 0, 0}, "LRL", false};
+        
+        double d2 = mod2pi(2.0 * PI - std::acos(tmp));
+        double d1 = mod2pi(-alpha - std::atan2(cos_a - cos_b, d + sin_a - sin_b) + d2 / 2.0);
+        double d3 = mod2pi(mod2pi(beta) - alpha - d1 + mod2pi(d2));
+        
+        return {{d1, d2, d3}, "LRL", true};
+    }
+
+    void interpolate(double length, char mode, double max_curvature, double origin_x, double origin_y, double origin_yaw, 
+                     std::vector<double>& path_x, std::vector<double>& path_y, std::vector<double>& path_yaw) {
+        if (mode == 'S') {
+            path_x.push_back(origin_x + length / max_curvature * std::cos(origin_yaw));
+            path_y.push_back(origin_y + length / max_curvature * std::sin(origin_yaw));
+            path_yaw.push_back(origin_yaw);
+        } else { // curve
+            double ldx = std::sin(length) / max_curvature;
+            double ldy = 0.0;
+            if (mode == 'L') {
+                ldy = (1.0 - std::cos(length)) / max_curvature;
+            } else if (mode == 'R') {
+                ldy = (1.0 - std::cos(length)) / -max_curvature;
+            }
+
+            double gdx = std::cos(-origin_yaw) * ldx + std::sin(-origin_yaw) * ldy;
+            double gdy = -std::sin(-origin_yaw) * ldx + std::cos(-origin_yaw) * ldy;
+            
+            path_x.push_back(origin_x + gdx);
+            path_y.push_back(origin_y + gdy);
+
+            if (mode == 'L') {
+                path_yaw.push_back(origin_yaw + length);
+            } else if (mode == 'R') {
+                path_yaw.push_back(origin_yaw - length);
+            }
+        }
+    }
+
+} // namespace DubinsMath
+
+
+/**
+ * Generates an optimal Dubins path 
+ * * @param s_x Start X position
+ * @param s_y Start Y position
+ * @param s_yaw Start Yaw angle (radians)
+ * @param g_x Goal X position
+ * @param g_y Goal Y position
+ * @param g_yaw Goal Yaw angle (radians)
+ * @param curvature The curvature limit (1.0 / radius)
+ * @param step_size The spacing between generated points on the path
+ * @return A vector of lemlib::Pose objects representing the global trajectory
+ */
+std::vector<lemlib::Pose> generate_dubins_path(double s_x, double s_y, double s_yaw, 
+                                               double g_x, double g_y, double g_yaw, 
+                                               double curvature, double step_size = 0.1) {
+    using namespace DubinsMath;
+
+    // 1. Calculate local goal (x, y, yaw) relative to start
+    double dx = g_x - s_x;
+    double dy = g_y - s_y;
+    
+    double local_goal_x = dx * std::cos(s_yaw) + dy * std::sin(s_yaw);
+    double local_goal_y = -dx * std::sin(s_yaw) + dy * std::cos(s_yaw);
+    double local_goal_yaw = g_yaw - s_yaw;
+
+    // 2. Setup path planning from origin
+    double d = std::hypot(local_goal_x, local_goal_y) * curvature;
+    double theta = mod2pi(std::atan2(local_goal_y, local_goal_x));
     double alpha = mod2pi(-theta);
-    double beta = mod2pi(lyaw - theta);
+    double beta = mod2pi(local_goal_yaw - theta);
 
-    struct Path {
-        std::vector<char> mode;
-        std::vector<double> lengths;
-        double cost;
+    double best_cost = std::numeric_limits<double>::infinity();
+    SegmentLengths best_seg;
+
+    // Test all planners mapping directly to the python func map
+    std::vector<SegmentLengths> planners = {
+        LSL(alpha, beta, d), RSR(alpha, beta, d), LSR(alpha, beta, d),
+        RSL(alpha, beta, d), RLR(alpha, beta, d), LRL(alpha, beta, d)
     };
 
-    std::vector<Path> candidates;
-
-    auto tryPath = [&](auto func, std::vector<char> mode) {
-        double d1, d2, d3;
-        if (func(alpha, beta, d, d1, d2, d3)) {
-            double cost = fabs(d1) + fabs(d2) + fabs(d3);
-            candidates.push_back({mode, {d1, d2, d3}, cost});
+    for (const auto& seg : planners) {
+        if (!seg.valid) continue;
+        
+        double cost = std::abs(seg.len[0]) + std::abs(seg.len[1]) + std::abs(seg.len[2]);
+        if (cost < best_cost) {
+            best_cost = cost;
+            best_seg = seg;
         }
-    };
-
-    tryPath(LSL, {'L','S','L'});
-    tryPath(RSR, {'R','S','R'});
-    tryPath(LSR, {'L','S','R'});
-    tryPath(RSL, {'R','S','L'});
-    tryPath(RLR, {'R','L','R'});
-    tryPath(LRL, {'L','R','L'});
-
-    if (candidates.empty()) return {};
-
-    // Choose shortest
-    Path best = candidates[0];
-    for (auto& p : candidates) {
-        if (p.cost < best.cost) best = p;
     }
 
-    // Generate path
-    std::vector<double> px, py, pyaw;
-    generateCourse(best.lengths, best.mode, curvature, step, px, py, pyaw);
-
-    // Convert back to global → Pose
-    std::vector<lemlib::Pose> result;
-
-    for (size_t i = 0; i < px.size(); i++) {
-        double gx2 = cos(-syaw)*px[i] + sin(-syaw)*py[i] + sx;
-        double gy2 = -sin(-syaw)*px[i] + cos(-syaw)*py[i] + sy;
-        double gyaw2 = angleMod(pyaw[i] + syaw);
-
-        result.emplace_back(
-            gx2,
-            gy2,
-            gyaw2 * 180.0 / PI
-        );
+    if (best_cost == std::numeric_limits<double>::infinity()) {
+        return {}; // Return empty vector if no valid path exists
     }
 
-    return result;
+    // 3. Generate Local Course
+    std::vector<double> lp_x = {0.0};
+    std::vector<double> lp_y = {0.0};
+    std::vector<double> lp_yaw = {0.0};
+
+    for (int i = 0; i < 3; i++) {
+        if (best_seg.len[i] == 0.0) continue;
+
+        double origin_x = lp_x.back();
+        double origin_y = lp_y.back();
+        double origin_yaw = lp_yaw.back();
+
+        double current_length = step_size;
+        while (std::abs(current_length + step_size) <= std::abs(best_seg.len[i])) {
+            interpolate(current_length, best_seg.mode[i], curvature, origin_x, origin_y, origin_yaw, lp_x, lp_y, lp_yaw);
+            current_length += step_size;
+        }
+        
+        interpolate(best_seg.len[i], best_seg.mode[i], curvature, origin_x, origin_y, origin_yaw, lp_x, lp_y, lp_yaw);
+    }
+
+    // 4. Convert local trajectory back to the global coordinate frame
+    std::vector<lemlib::Pose> final_path;
+    final_path.reserve(lp_x.size());
+    
+    for (size_t i = 0; i < lp_x.size(); i++) {
+        // Rotate local coordinates back by the starting yaw, then translate by start position
+        double g_x_path = std::cos(s_yaw) * lp_x[i] - std::sin(s_yaw) * lp_y[i] + s_x;
+        double g_y_path = std::sin(s_yaw) * lp_x[i] + std::cos(s_yaw) * lp_y[i] + s_y;
+        double g_yaw_path = angle_mod(lp_yaw[i] + s_yaw);
+        
+        final_path.push_back(lemlib::Pose(g_x_path, g_y_path, g_yaw_path));
+    }
+
+    return final_path;
 }
 
 void lemlib::Chassis::pursuitToPose(float x, float y, float theta, int timeout, PursuitToPoseParams params, bool async)
@@ -227,7 +269,6 @@ void lemlib::Chassis::pursuitToPose(float x, float y, float theta, int timeout, 
         return;
     }
 
-    theta += 180.0f;
     lemlib::Pose target(x, y, theta);
 
 
@@ -240,7 +281,7 @@ void lemlib::Chassis::pursuitToPose(float x, float y, float theta, int timeout, 
 
     lemlib::Pose startPos = getPose();
 
-    std::vector<lemlib::Pose> pathPoints = planDubins(startPos.x, startPos.y, atan2(target.y - startPos.y, target.x - startPos.x), target.x, target.y, ((90.0 - target.theta) * PI / 180.0), pathCurvature, params.resolution); // get list of path points
+    std::vector<lemlib::Pose> pathPoints = generate_dubins_path(startPos.x, startPos.y, atan2(target.y - startPos.y, target.x - startPos.x), target.x, target.y, degToRad(target.theta - 90.0f), pathCurvature, params.resolution); // get list of path points
     if (pathPoints.size() == 0) {
         // set distTraveled to -1 to indicate that the function has finished
         distTraveled = -1;
@@ -283,7 +324,7 @@ void lemlib::Chassis::pursuitToPose(float x, float y, float theta, int timeout, 
 
         if(params.minSpeedOverride && target < params.minSpeed) target = params.minSpeed;
         // Save calculated velocity into theta
-        pathPoints[i].theta = degToRad(pathPoints[i].theta);
+        pathPoints[i].theta = DubinsMath::PI/2 - pathPoints[i].theta;
         path_points_r.push_back(std::pair<lemlib::Pose, float>(pathPoints.at(i), target));
     }
 
@@ -292,19 +333,10 @@ void lemlib::Chassis::pursuitToPose(float x, float y, float theta, int timeout, 
 
     if(params.outputDebug)
     {
-        std::ofstream pathDebugOutput("PathingDebug.txt", std::ios::app);
         for (int i = 0; i < path_points_r.size(); i++)
         {
-            pathDebugOutput << path_points_r[i].first.x << ", " << path_points_r[i].first.y << ", " << path_points_r[i].first.theta << std::endl;
+            std::cout << pathPoints[i].x << ", " << pathPoints[i].y << ", " << pathPoints[i].theta << std::endl;
         }
-        pathDebugOutput << "\n\n\n";
-
-        std::ofstream pathDebugOutputTwo("PathingDebugTwo.txt", std::ios::app);
-        for (int i = 0; i < path_points_r.size(); i++)
-        {
-            pathDebugOutputTwo << pathPoints[i].x << ", " << pathPoints[i].y << ", " << pathPoints[i].theta << std::endl;
-        }
-        pathDebugOutputTwo << "\n\n\n";
     }
 
 
@@ -341,42 +373,55 @@ void lemlib::Chassis::pursuitToPose(float x, float y, float theta, int timeout, 
 
         // 3. Extract Target Data
         lemlib::Pose targetPose = path_points_r.at(closestPoint).first;
-        float v_d = path_points_r.at(closestPoint).second; // Desired linear velocity
+        float v_d = path_points_r.at(closestPoint).second;
+
+        // Convert LemLib degrees/radians to Standard Math Radians (0=East, CCW)
+        // targetPose.theta is in degrees from the Dubins generator
+        float math_target_theta = DubinsMath::PI / 2.0 - targetPose.theta;
+        // pose.theta from getPose(true) is in radians
+        float math_pose_theta = DubinsMath::PI / 2.0 - pose.theta; 
 
         // 4. Calculate Desired Angular Velocity (w_d)
-        // w = v * curvature. We calculate local curvature from the path points.
         float k_d = 0;
         if (closestPoint < path_points_r.size() - 1) {
             k_d = findLookaheadCurvature(path_points_r.at(closestPoint).first, 0, path_points_r.at(closestPoint+1).first);
         }
         float w_d = v_d * k_d;
 
-        // 5. Calculate Errors in the Robot's Local Frame
+        // 5. Calculate Errors in the Robot's Local Frame (Using Math Radians)
         float dX = targetPose.x - pose.x;
         float dY = targetPose.y - pose.y;
-        float eTheta = angleMod(targetPose.theta - (pose.theta * PI / 180.0)); // Ensure radians
+        float eTheta = DubinsMath::angle_mod(math_target_theta - math_pose_theta);
 
-        float eX = cos(pose.theta * PI / 180.0) * dX + sin(pose.theta * PI / 180.0) * dY;
-        float eY = -sin(pose.theta * PI / 180.0) * dX + cos(pose.theta * PI / 180.0) * dY;
+        float eX = cos(math_pose_theta) * dX + sin(math_pose_theta) * dY;
+        float eY = -sin(math_pose_theta) * dX + cos(math_pose_theta) * dY;
 
         // 6. Ramsete Gain Calculation
-        // Standard gains: b = 2.0, zeta = 0.7
         float b = params.b; 
         float zeta = params.zeta;
         float k = 2 * zeta * sqrt(pow(w_d, 2) + b * pow(v_d, 2));
 
         // 7. Compute Adjusted Velocities
         float v = v_d * cos(eTheta) + k * eX;
-        // Sinc function (sin(x)/x) handles the case where eTheta is near zero
         float sinc = (std::abs(eTheta) < 1e-4) ? 1.0 : sin(eTheta) / eTheta;
         float w = w_d + b * v_d * sinc * eY + k * eTheta;
 
         // 8. Output to Motors (Inverse Kinematics)
-        float targetLeftVel = v + (w * drivetrain.trackWidth / 2);
-        float targetRightVel = v - (w * drivetrain.trackWidth / 2);
+        float targetLeftVel = v - (w * drivetrain.trackWidth / 2);
+        float targetRightVel = v + (w * drivetrain.trackWidth / 2);
+
+        if (params.forwards) {
+            drivetrain.leftMotors->move(targetLeftVel);
+            drivetrain.rightMotors->move(targetRightVel);
+        } else {
+            drivetrain.leftMotors->move(-targetRightVel);
+            drivetrain.rightMotors->move(-targetLeftVel);
+        }
 
         pros::delay(10);
     }
+
+    std::cout << "Done!" << std::endl;
 
     // stop the robot
     drivetrain.leftMotors->move(0);
