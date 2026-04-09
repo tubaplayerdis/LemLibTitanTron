@@ -192,7 +192,7 @@ std::vector<DubinsMath::PathPoint> generate_dubins_path(
     double s_x, double s_y, double s_yaw, 
     double g_x, double g_y, double g_yaw, 
     double curvature, double step_size,
-    float minSpeed, float maxSpeed, float horizontalDrift) 
+    float minSpeed, float maxSpeed, float horizontalDrift, float slowDist) 
 {
     using namespace DubinsMath;
 
@@ -276,7 +276,7 @@ std::vector<DubinsMath::PathPoint> generate_dubins_path(
     
     // Constant for converting VEX velocity (0-127) to real-world Inches Per Second (IPS)
     // You may need to tune this constant (e.g., 45.0) to match your physical robot's top speed!
-    const float MAX_ROBOT_IPS = 45.0f; 
+    const float MAX_ROBOT_IPS = 63.0f; 
 
     for (int i = 0; i < raw_poses.size(); i++) {
         float target_v = maxSpeed;
@@ -294,9 +294,9 @@ std::vector<DubinsMath::PathPoint> generate_dubins_path(
         }
 
         // B. Distance-to-End Deceleration (The "Brake")
-        float brakeDistance = 12.0f; 
+        float brakeDistance = slowDist; 
         if (dist_to_end[i] < brakeDistance) {
-            target_v = std::min(target_v, (dist_to_end[i] / brakeDistance) * maxSpeed + 15.0f);
+            target_v = std::min(target_v, (dist_to_end[i] / brakeDistance) * maxSpeed);
         }
 
         // C. Apply Minimum Speed limits
@@ -353,13 +353,13 @@ int findClosestNew(lemlib::Pose pose, const std::vector<lemlib::Pose>& path, int
     return closestPoint;
 }
 
-void lemlib::Chassis::ramsetteToPose(float x, float y, float theta, int timeout, RamsetteToPoseParams params, bool async)
+void lemlib::Chassis::ramseteToPose(float x, float y, float theta, int timeout, RamseteToPoseParams params, bool async)
 {
     this->requestMotionStart();
     if (!this->motionRunning) return;
     
     if (async) {
-        pros::Task task([&]() { ramsetteToPose(x, y, theta, timeout, params, false); });
+        pros::Task task([&]() { ramseteToPose(x, y, theta, timeout, params, false); });
         this->endMotion();
         pros::delay(10);
         return;
@@ -383,7 +383,7 @@ void lemlib::Chassis::ramsetteToPose(float x, float y, float theta, int timeout,
         startPos.x, startPos.y, math_start_yaw, 
         target.x, target.y, math_end_yaw, 
         pathCurvature, params.resolution, 
-        params.minSpeed, params.maxSpeed, params.horizontalDrift
+        params.minSpeed, params.maxSpeed, params.horizontalDrift, params.slowdownRange
     );
 
     if (pathPoints.size() == 0) {
@@ -409,6 +409,8 @@ void lemlib::Chassis::ramsetteToPose(float x, float y, float theta, int timeout,
     // Start a timer right before the loop begins
     uint32_t startTime = pros::millis();
 
+    bool ranEarlyLambda = false;
+
     // --- Ramsete Tracking Loop ---
     while (!timer.isDone() && this->motionRunning) {
         pose = this->getPose(true);
@@ -430,8 +432,17 @@ void lemlib::Chassis::ramsetteToPose(float x, float y, float theta, int timeout,
 
         // 2. Break Conditions
         // Break if we reach the end of the array, or physically get within 3 inches of the goal
-        if (targetIndex >= pathPoints.size() - 5 && pose.distance(pathPoints.back().pose) < 3.0) {
+        if (pose.distance(pathPoints.back().pose) < params.pidExitRange) {
             break;
+        }
+
+        // calculate distance to the target point
+        const float distTarget = pose.distance(target);
+
+        if (distTarget <= params.earlyLambdaRange && params.earlyLambda != nullptr && !ranEarlyLambda)
+        {
+            new pros::Task(params.earlyLambda);
+            ranEarlyLambda = true;
         }
 
         // 3. Extract Target Data
@@ -441,7 +452,7 @@ void lemlib::Chassis::ramsetteToPose(float x, float y, float theta, int timeout,
         // --- THE UNIT CONVERSION FIX ---
         // Ramsete MUST use physical units. Convert 0-127 to Inches Per Second.
         // Change 45.0 to match your robot's actual top speed in in/s!
-        const float MAX_IPS = 45.0f; 
+        const float MAX_IPS = 63.0f; 
         float v_d = v_d_voltage * (MAX_IPS / 127.0f); 
 
         // 4. Calculate Desired Angular Velocity (w_d) in Radians/Sec
@@ -517,15 +528,13 @@ void lemlib::Chassis::ramsetteToPose(float x, float y, float theta, int timeout,
     bool settling = false;
     std::optional<float> prevRawDeltaTheta = std::nullopt;
     std::optional<float> prevDeltaTheta = std::nullopt;
-    std::uint8_t compState = pros::competition::get_status();
     distTraveled = 0;
-    Timer timer(timeout);
     angularLargeExit.reset();
     angularSmallExit.reset();
     angularPID.reset();
 
     // main loop
-    while (!timer.isDone() && !angularLargeExit.getExit() && !angularSmallExit.getExit() && this->motionRunning) {
+    while (!timer.isDone() && !angularLargeExit.getExit() && !angularSmallExit.getExit() && this->motionRunning && params.pidExitRange != 0) {
         // update variables
         Pose pose = getPose();
 
@@ -546,7 +555,6 @@ void lemlib::Chassis::ramsetteToPose(float x, float y, float theta, int timeout,
         if (prevDeltaTheta == std::nullopt) prevDeltaTheta = deltaTheta;
 
         // motion chaining
-        if (params.minSpeed != 0 && fabs(deltaTheta) < params.earlyExitRange) break;
         if (params.minSpeed != 0 && sgn(deltaTheta) != sgn(prevDeltaTheta)) break;
 
         // calculate the speed
