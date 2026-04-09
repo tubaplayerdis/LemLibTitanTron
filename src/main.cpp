@@ -134,7 +134,7 @@ void autonomous() {
     // Move to x: 20 and y: 15, and face heading 90. Timeout set to 4000 ms
     
     chassis.setPose(-45, -25, 0);
-    chassis.ramsetteToPose(-13.4, 23.2, 90, 5000, {.b = 2.0, .outputDebug=true}, true);
+    chassis.ramsetteToPose(-13.4, 23.2, 90, 5000, {.zeta = 1.1, .b = 0.02, .outputDebug=true}, true);
     while(true)
     {
         auto pos = chassis.getPose(true);

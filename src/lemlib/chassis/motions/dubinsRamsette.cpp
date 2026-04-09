@@ -1,6 +1,7 @@
 #include <vector>
 #include "lemlib/chassis/chassis.hpp"
 #include "lemlib/util.hpp"
+#include "lemlib/timer.hpp"
 
 
 
@@ -403,45 +404,61 @@ void lemlib::Chassis::ramsetteToPose(float x, float y, float theta, int timeout,
     int compState = pros::competition::get_status();
     distTraveled = 0;
 
+    Timer timer(timeout);
+
     // Start a timer right before the loop begins
     uint32_t startTime = pros::millis();
 
     // --- Ramsete Tracking Loop ---
-    for (int i = 0; i < timeout / 10 && pros::competition::get_status() == compState && this->motionRunning; i++) {
+    while (!timer.isDone() && this->motionRunning) {
         pose = this->getPose(true);
-        if (!params.forwards) pose.theta -= M_PI; //This needs to be revered for some reason. IDK why tho
+        if (!params.forwards) pose.theta -= M_PI;
 
-        // 1. Time-Based Index Searching
-        // Calculate elapsed time in seconds
-        float elapsedTime = (pros::millis() - startTime) / 1000.0f; 
-
-        // Advance the target index until its expected time matches or exceeds our real elapsed time
-        while (targetIndex < pathPoints.size() - 1 && pathPoints[targetIndex].t < elapsedTime) {
-            targetIndex++;
+        // 1. Distance-Based Index Searching
+        // We search up to 15 points ahead of our current index to find the physically closest point.
+        // This guarantees the target NEVER outruns the robot, no matter how slow the robot drives!
+        int searchEnd = std::min((int)pathPoints.size(), targetIndex + 15);
+        float minDist = std::numeric_limits<float>::infinity();
+        
+        for (int j = targetIndex; j < searchEnd; j++) {
+            float dist = pose.distance(pathPoints[j].pose);
+            if (dist < minDist) {
+                minDist = dist;
+                targetIndex = j; // Lock the target to the robot's physical location
+            }
         }
 
         // 2. Break Conditions
-        // Stop if we have reached the end of the time array, OR if we physically hit the end early
-        if (targetIndex >= pathPoints.size() - 1 || pose.distance(pathPoints.back().pose) < 3.0) {
+        // Break if we reach the end of the array, or physically get within 3 inches of the goal
+        if (targetIndex >= pathPoints.size() - 5 && pose.distance(pathPoints.back().pose) < 3.0) {
             break;
         }
 
-        // 3. Extract Target Data based on the current TIME
+        // 3. Extract Target Data
         lemlib::Pose targetPose = pathPoints.at(targetIndex).pose;
-        float v_d = pathPoints.at(targetIndex).v; 
+        float v_d_voltage = pathPoints.at(targetIndex).v; 
+
+        // --- THE UNIT CONVERSION FIX ---
+        // Ramsete MUST use physical units. Convert 0-127 to Inches Per Second.
+        // Change 45.0 to match your robot's actual top speed in in/s!
+        const float MAX_IPS = 45.0f; 
+        float v_d = v_d_voltage * (MAX_IPS / 127.0f); 
+
+        // 4. Calculate Desired Angular Velocity (w_d) in Radians/Sec
+        float w_d = 0;
+        if (targetIndex < pathPoints.size() - 1) {
+            float dTheta = DubinsMath::angle_mod(pathPoints.at(targetIndex+1).pose.theta - targetPose.theta);
+            float dt = pathPoints.at(targetIndex+1).t - pathPoints.at(targetIndex).t;
+            if (dt > 0.001f) {
+                w_d = dTheta / dt;
+            }
+        }
 
         // --- Coordinate Conversions ---
-        float theta_actual = (M_PI / 2.0) - pose.theta;
-        float theta_desired = targetPose.theta;
+        float theta_desired = targetPose.theta; 
+        float theta_actual = (M_PI / 2.0) - pose.theta; 
 
-        // 4. Calculate Desired Angular Velocity (w_d)
-        float k_d = 0;
-        if (targetIndex < pathPoints.size() - 1) {
-            k_d = findLookaheadCurvature(pathPoints.at(targetIndex).pose, 0, pathPoints.at(targetIndex+1).pose);
-        }
-        float w_d = v_d * k_d;
-
-        // 5. Compute Error
+        // 5. Compute Error (in INCHES and RADIANS)
         float dX = targetPose.x - pose.x;
         float dY = targetPose.y - pose.y;
         
@@ -449,21 +466,28 @@ void lemlib::Chassis::ramsetteToPose(float x, float y, float theta, int timeout,
         float eY = -sin(theta_actual) * dX + cos(theta_actual) * dY;
         float eTheta = DubinsMath::angle_mod(theta_desired - theta_actual);
 
-        // 6. Compute Ramsete Gain & Velocity Adjustments
-        float b = params.b; 
-        float zeta = params.zeta;
+        // 6. Compute Ramsete Gain
+        // IMPORTANT: Because our error is in Inches, not Meters, b must be scaled down!
+        // Standard meter b=2.0 becomes b=0.0013 in inches ( 2.0 / 39.37^2 ).
+        float b = params.b; // You can still use params.b here if you update it in your function call!
+        float zeta = params.zeta; // 0.7 is still perfectly fine
         float k = 2 * zeta * sqrt(pow(w_d, 2) + b * pow(v_d, 2));
 
+        // 7. Compute Output Velocities (in INCHES PER SECOND)
         float v = v_d * cos(eTheta) + k * eX;
         float sinc = (std::abs(eTheta) < 1e-4) ? 1.0 : sin(eTheta) / eTheta;
         float w = w_d + k * eTheta + (b * v_d * sinc * eY);
 
-        // 7. Inverse Kinematics
+        // 8. Inverse Kinematics (in INCHES PER SECOND)
         float angularMotorVelocity = w * drivetrain.trackWidth / 2.0;
-        float targetLeftVel = v + angularMotorVelocity;
-        float targetRightVel = v - angularMotorVelocity;
+        float left_ips = v - angularMotorVelocity;
+        float right_ips = v + angularMotorVelocity;
 
-        // Desaturation
+        // --- CONVERT BACK TO VOLTAGE (0-127) ---
+        float targetLeftVel = left_ips * (127.0f / MAX_IPS);
+        float targetRightVel = right_ips * (127.0f / MAX_IPS);
+
+        // Desaturation (Prevents ratio breaking at high speeds)
         float max_mag = std::max(std::abs(targetLeftVel), std::abs(targetRightVel));
         if (max_mag > 127.0) {
             targetLeftVel = (targetLeftVel / max_mag) * 127.0;
@@ -482,10 +506,11 @@ void lemlib::Chassis::ramsetteToPose(float x, float y, float theta, int timeout,
         pros::delay(10);
     }
 
-    std::cout << "Done!" << std::endl;
-
-    drivetrain.leftMotors->move(0);
-    drivetrain.rightMotors->move(0);
+    // stop the drivetrain
+    setBrakeMode(pros::motor_brake_mode_e::E_MOTOR_BRAKE_HOLD);
+    drivetrain.leftMotors->brake();
+    drivetrain.rightMotors->brake();
+    // set distTraveled to -1 to indicate that the function has finished
     distTraveled = -1;
     this->endMotion();
 }
