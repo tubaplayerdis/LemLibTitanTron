@@ -377,7 +377,7 @@ int findClosestNew(lemlib::Pose pose, const std::vector<lemlib::Pose>& path, int
     return closestPoint;
 }
 
-std::int32_t voltage_to_velocity(std::int32_t voltage)
+std::int32_t voltage_2_velocity(std::int32_t voltage)
 {
     return (std::int32_t)(((double)voltage / 127.0) * 600.0);
 }
@@ -547,11 +547,11 @@ void lemlib::Chassis::ramseteToPose(float x, float y, float theta, int timeout, 
 
         // Final Motor Output
         if (params.forwards) {
-            drivetrain.leftMotors->move_velocity(voltage_to_velocity(targetLeftVel));
-            drivetrain.rightMotors->move_velocity(voltage_to_velocity(targetRightVel));
+            drivetrain.leftMotors->move_velocity(voltage_2_velocity(targetLeftVel));
+            drivetrain.rightMotors->move_velocity(voltage_2_velocity(targetRightVel));
         } else {
-            drivetrain.leftMotors->move_velocity(voltage_to_velocity(-targetRightVel));
-            drivetrain.rightMotors->move_velocity(voltage_to_velocity(-targetLeftVel));
+            drivetrain.leftMotors->move_velocity(voltage_2_velocity(-targetRightVel));
+            drivetrain.rightMotors->move_velocity(voltage_2_velocity(-targetLeftVel));
         }
 
         pros::delay(10);
