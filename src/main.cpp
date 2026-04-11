@@ -136,7 +136,6 @@ void autonomous() {
     chassis.moveToPoint(-26.5, 18.5, 600, {.forwards = false, .minSpeed = 40, .earlyExitRange = 2.5}, false);
     chassis.swingToPoint(-5, -5, lemlib::DriveSide::RIGHT, 700, {.direction = lemlib::AngularDirection::CCW_COUNTERCLOCKWISE, .minSpeed = 30}, false);
     chassis.moveToPose(-10.5, 10.5, 130, 800, {.horizontalDrift = 8, .lead = 0.1, .earlyExitRange = 1}, false);
-    chassis.ramseteToPose(-55, 46.5, 90, 5000, {.forwards = false, .invertTarget = true, .zeta = 0.7, .b = 0.002, .slowdownRange = 48, .outputDebug=true}, false);
 }
 
 /**
