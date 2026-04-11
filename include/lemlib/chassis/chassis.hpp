@@ -388,6 +388,47 @@ struct MoveToPointParams {
         std::function<void()> earlyLambda = nullptr;
 };
 
+struct RamseteToPoseParams {
+        /** whether the robot should move forwards or backwards. True by default */
+        bool forwards = true;
+        /** whether to invert the target for the the pathing algorithm. Follow the debug output to see if this is needed */
+        bool invertTarget = false;
+        /** how fast the robot will move around corners. Recommended value 2-15. 0 means use horizontalDrift set in
+         * chassis class. 0 by default. */
+        float horizontalDrift = 0;
+         /** the maximum speed the robot can travel at. Value between 0-127. 127 by default */
+        float maxSpeed = 127;
+        /** the minimum speed the robot can travel at. Value between 0-127. 0 by default */
+        float minSpeed = 0;
+        /** Whether minSpeed will override the generated cornering speed calculated via horizontalDrift. False by default */
+        bool minSpeedOverride = false;
+        /** resolution of the points generated. comparable to path.jerry.io's point density. */
+        float resolution = 0.1;
+        /** The turning radius used to generate curves. Defaults to 1.5 times the wheel base width */
+        float turningRadius = 0;
+        /** ramsette zeta */
+        float zeta = 0.7;
+        /** ramsette b */
+        float b = 0.002;
+        /** distance where angular PID takes over to complete the movement. Setting to zero will not use a PID exit and will only use ramsete*/
+        float pidExitRange = 3;
+        /** braking curve expo constant */
+        float p = 1.0;
+        /** distance (in) where ramsette starts to slow down the movement */
+        float slowdownRange = 32;
+        /** distance between the robot and target point where the earlyLambda will be executed. */
+        float earlyLambdaRange = 0;
+        /**
+         * Function that executes upon earlyLambdaRange is true. Useful for adding custom pre exit behavior.
+         * 
+         * @note earlyLambda will execute asynchronously and only once.
+         */
+        std::function<void()> earlyLambda = nullptr;
+
+        /*Print the generated path to the micro sd card*/
+        bool outputDebug = false;
+};
+
 // default drive curve
 extern ExpoDriveCurve defaultDriveCurve;
 
@@ -755,6 +796,17 @@ class Chassis {
          * @endcode
          */
         void moveToPoint(float x, float y, int timeout, MoveToPointParams params = {}, bool async = true);
+        /**
+         * @brief Drive to a point following the most optimal Dubins path using ramsete.
+         * 
+         * @param x x location
+         * @param y y location
+         * @param theta target heading in degrees
+         * @param timeout longest time the robot can spend moving
+         * @param params struct to simulate named parameters
+         * @param async whether the function should be run asynchronously. true by default
+         */
+        void ramseteToPose(float x, float y, float theta, int timeout, RamseteToPoseParams params = {}, bool async = true);
         /**
          * @brief Move the chassis along a path
          *

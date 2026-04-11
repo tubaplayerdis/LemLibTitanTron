@@ -132,10 +132,11 @@ ASSET(example_txt); // '.' replaced with "_" to make c++ happy
  */
 void autonomous() {
     // Move to x: 20 and y: 15, and face heading 90. Timeout set to 4000 ms
-    
-    chassis.setPose(-11.5, 11.5, 135);
-    chassis.moveToPose(-55, 46.5, 90, 2500, {.forwards = false, .lead = 0.2}, false);
-    //chassis.ramseteToPose(-55, 46.5, 90, 5000, {.forwards = false, .invertTarget = true, .turningRadius = 15, .zeta = 0.7, .b = 0.002, .slowdownRange = 48, .outputDebug=true}, false);
+    chassis.setPose(-45.85, 12.09, 270);
+    chassis.moveToPoint(-26.5, 18.5, 600, {.forwards = false, .minSpeed = 40, .earlyExitRange = 2.5}, false);
+    chassis.swingToPoint(-5, -5, lemlib::DriveSide::RIGHT, 700, {.direction = lemlib::AngularDirection::CCW_COUNTERCLOCKWISE, .minSpeed = 30}, false);
+    chassis.moveToPose(-10.5, 10.5, 130, 800, {.horizontalDrift = 8, .lead = 0.1, .earlyExitRange = 1}, false);
+    chassis.ramseteToPose(-55, 46.5, 90, 5000, {.forwards = false, .invertTarget = true, .zeta = 0.7, .b = 0.002, .slowdownRange = 48, .outputDebug=true}, false);
 }
 
 /**
