@@ -5,6 +5,11 @@
 #include "lemlib/util.hpp"
 #include "pros/misc.hpp"
 
+std::int32_t voltage_to_velocity(std::int32_t voltage)
+{
+    return (std::int32_t)(((double)voltage / 127.0) * 600.0);
+}
+
 void lemlib::Chassis::moveToPose(float x, float y, float theta, int timeout, MoveToPoseParams params, bool async) {
     // take the mutex
     this->requestMotionStart();
