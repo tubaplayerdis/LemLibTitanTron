@@ -133,14 +133,9 @@ ASSET(example_txt); // '.' replaced with "_" to make c++ happy
 void autonomous() {
     // Move to x: 20 and y: 15, and face heading 90. Timeout set to 4000 ms
     
-    chassis.setPose(-45, -25, 0);
-    chassis.ramseteToPose(-13.4, 23.2, 90, 5000, {.zeta = 0.7, .b = 0.0013, .outputDebug=true}, true);
-    while(true)
-    {
-        auto pos = chassis.getPose(true);
-        std::cout << pos.x << ", " << pos.y << ", " << pos.theta << std::endl;
-        pros::delay(20);
-    }
+    chassis.setPose(-11.5, 11.5, 135);
+    chassis.moveToPose(-55, 46.5, 90, 2500, {.forwards = false, .lead = 0.2}, false);
+    //chassis.ramseteToPose(-55, 46.5, 90, 5000, {.forwards = false, .invertTarget = true, .turningRadius = 15, .zeta = 0.7, .b = 0.002, .slowdownRange = 48, .outputDebug=true}, false);
 }
 
 /**

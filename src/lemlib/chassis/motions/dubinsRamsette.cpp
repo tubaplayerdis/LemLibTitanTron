@@ -172,6 +172,26 @@ namespace DubinsMath {
 
 } // namespace DubinsMath
 
+/**
+ * @brief Technically this is an acceleration curve. Negatively Exponential
+ * @note F(x) = 127 * (1-(x/k))^2
+ * @param x durrent dist to brake distance
+ * @param max  maxSpeed
+ * @param distmax brake distance
+ * @param p exponetiality constant
+ * @return float 
+ */
+float decelerateCurve(float x, float max, float distmax, float p = 2.1)
+{
+    return std::max((max * pow((1 - (x/distmax)), p)), 10.0);
+}
+
+float fixHeading(float heading)
+{
+    if(heading < 360.0f && heading >= 0.0f) return heading;
+    if(heading > 360.0f) fixHeading(heading - 360.0f);
+    if(heading < 0.0f) fixHeading(heading + 360.0f);
+}
 
 /**
  * Generates an optimal Dubins path with embedded velocity and time profiles
@@ -192,7 +212,7 @@ std::vector<DubinsMath::PathPoint> generate_dubins_path(
     double s_x, double s_y, double s_yaw, 
     double g_x, double g_y, double g_yaw, 
     double curvature, double step_size,
-    float minSpeed, float maxSpeed, float horizontalDrift, float slowDist) 
+    float minSpeed, float maxSpeed, float horizontalDrift, float slowDist, float pcon) 
 {
     using namespace DubinsMath;
 
@@ -296,7 +316,8 @@ std::vector<DubinsMath::PathPoint> generate_dubins_path(
         // B. Distance-to-End Deceleration (The "Brake")
         float brakeDistance = slowDist; 
         if (dist_to_end[i] < brakeDistance) {
-            target_v = std::min(target_v, (dist_to_end[i] / brakeDistance) * maxSpeed);
+            target_v = std::min(target_v, decelerateCurve(brakeDistance - dist_to_end[i], maxSpeed, brakeDistance, pcon));
+            std::cout << target_v << std::endl;
         }
 
         // C. Apply Minimum Speed limits
@@ -307,6 +328,7 @@ std::vector<DubinsMath::PathPoint> generate_dubins_path(
         // D. Ensure the final point is 0 velocity to trigger stops
         if (i == raw_poses.size() - 1) {
             target_v = 0.0f;
+
         }
 
         // E. Integrate Time (dt = distance / velocity)
@@ -353,6 +375,11 @@ int findClosestNew(lemlib::Pose pose, const std::vector<lemlib::Pose>& path, int
     return closestPoint;
 }
 
+std::int32_t voltage_to_velocity(std::int32_t voltage)
+{
+    return (std::int32_t)(((double)voltage / 127.0) * 600.0);
+}
+
 void lemlib::Chassis::ramseteToPose(float x, float y, float theta, int timeout, RamseteToPoseParams params, bool async)
 {
     this->requestMotionStart();
@@ -367,6 +394,17 @@ void lemlib::Chassis::ramseteToPose(float x, float y, float theta, int timeout, 
 
     lemlib::Pose target(x, y, theta);
     lemlib::Pose startPos = getPose();
+    startPos.theta = fixHeading(startPos.theta);
+
+    if(!params.forwards)
+    {
+        startPos.theta -= 180.0f;
+    }
+
+    if(params.invertTarget)
+    {
+        target.theta -= 180.0f;
+    }
 
     if(params.turningRadius == 0) params.turningRadius = drivetrain.trackWidth * 0.75;
     float pathCurvature = 1.00f / params.turningRadius;
@@ -383,7 +421,7 @@ void lemlib::Chassis::ramseteToPose(float x, float y, float theta, int timeout, 
         startPos.x, startPos.y, math_start_yaw, 
         target.x, target.y, math_end_yaw, 
         pathCurvature, params.resolution, 
-        params.minSpeed, params.maxSpeed, params.horizontalDrift, params.slowdownRange
+        params.minSpeed, params.maxSpeed, params.horizontalDrift, params.slowdownRange, params.p
     );
 
     if (pathPoints.size() == 0) {
@@ -394,7 +432,7 @@ void lemlib::Chassis::ramseteToPose(float x, float y, float theta, int timeout, 
 
     if(params.outputDebug) {
         for (const auto& pt : pathPoints) {
-            std::cout << pt.pose.x << ", " << pt.pose.y << ", " << pt.pose.theta << " | v: " << pt.v << " t: " << pt.t << std::endl;
+            std::cout << pt.pose.x << ", " << pt.pose.y << ", " << pt.pose.theta <<  std::endl;
         }
     }
 
@@ -414,7 +452,7 @@ void lemlib::Chassis::ramseteToPose(float x, float y, float theta, int timeout, 
     // --- Ramsete Tracking Loop ---
     while (!timer.isDone() && this->motionRunning) {
         pose = this->getPose(true);
-        if (!params.forwards) pose.theta -= M_PI;
+        if (!params.forwards) pose.theta = lemlib::angleError(pose.theta, 180.0f * (M_PI/180.0f));
 
         // 1. Distance-Based Index Searching
         // We search up to 15 points ahead of our current index to find the physically closest point.
@@ -507,11 +545,11 @@ void lemlib::Chassis::ramseteToPose(float x, float y, float theta, int timeout, 
 
         // Final Motor Output
         if (params.forwards) {
-            drivetrain.leftMotors->move(targetLeftVel);
-            drivetrain.rightMotors->move(targetRightVel);
+            drivetrain.leftMotors->move_velocity(voltage_to_velocity(targetLeftVel));
+            drivetrain.rightMotors->move_velocity(voltage_to_velocity(targetRightVel));
         } else {
-            drivetrain.leftMotors->move(-targetRightVel);
-            drivetrain.rightMotors->move(-targetLeftVel);
+            drivetrain.leftMotors->move_velocity(voltage_to_velocity(-targetRightVel));
+            drivetrain.rightMotors->move_velocity(voltage_to_velocity(-targetLeftVel));
         }
 
         pros::delay(10);
@@ -519,6 +557,8 @@ void lemlib::Chassis::ramseteToPose(float x, float y, float theta, int timeout, 
 
     drivetrain.leftMotors->move(0);
     drivetrain.rightMotors->move(0);
+
+    pros::delay(10);
 
     float targetTheta;
     float deltaTheta;
@@ -534,9 +574,16 @@ void lemlib::Chassis::ramseteToPose(float x, float y, float theta, int timeout, 
     angularPID.reset();
 
     // main loop
-    while (!timer.isDone() && !angularLargeExit.getExit() && !angularSmallExit.getExit() && this->motionRunning && params.pidExitRange != 0) {
+    while (true) {
         // update variables
         Pose pose = getPose();
+
+        std::cout << "PID LOOP" << std::endl;
+
+        if(timer.isDone() && angularLargeExit.getExit() && angularSmallExit.getExit() && params.pidExitRange == 0)
+        {
+            break;
+        }
 
         // update completion vars
         distTraveled = fabs(angleError(pose.theta, startTheta, false));

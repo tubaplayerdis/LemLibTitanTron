@@ -192,13 +192,6 @@ enum class AngularDirection {
     AUTO /** turn in the direction with the shortest distance to target */
 };
 
-enum class PathType {
-    RSR,
-    RSL,
-    LSR,
-    LSL
-};
-
 /**
  * @brief Parameters for Chassis::turnToPoint
  *
@@ -398,6 +391,8 @@ struct MoveToPointParams {
 struct RamseteToPoseParams {
         /** whether the robot should move forwards or backwards. True by default */
         bool forwards = true;
+        /** whether to invert the target for the the pathing algorithm. Follow the debug output to see if this is needed */
+        bool invertTarget = false;
         /** how fast the robot will move around corners. Recommended value 2-15. 0 means use horizontalDrift set in
          * chassis class. 0 by default. */
         float horizontalDrift = 0;
@@ -414,11 +409,13 @@ struct RamseteToPoseParams {
         /** ramsette zeta */
         float zeta = 0.7;
         /** ramsette b */
-        float b = 0.0013;
+        float b = 0.002;
         /** distance where angular PID takes over to complete the movement. Setting to zero will not use a PID exit and will only use ramsete*/
         float pidExitRange = 3;
-        /** distance where ramsette starts to slow down the movement */
-        float slowdownRange = 12;
+        /** braking curve expo constant */
+        float p = 1.0;
+        /** distance (in) where ramsette starts to slow down the movement */
+        float slowdownRange = 32;
         /** distance between the robot and target point where the earlyLambda will be executed. */
         float earlyLambdaRange = 0;
         /**
